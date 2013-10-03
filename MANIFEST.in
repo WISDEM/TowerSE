@@ -1,0 +1,3 @@
+graft src/towerse/sphinx_build/html
+recursive-include src/towerse/test *.py
+
