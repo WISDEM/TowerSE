@@ -11,7 +11,7 @@ from math import sqrt, cos, atan2
 import numpy as np
 
 
-def shellBuckling(self, npt, sigma_z, sigma_t, tau_zt, L_reinforced, gamma_f=1.2, gamma_b=1.1):
+def shellBuckling(z, d, t, npt, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma_y, gamma_f=1.2, gamma_b=1.1):
     """
     Estimate shell buckling constraint along tower.
 
@@ -35,9 +35,9 @@ def shellBuckling(self, npt, sigma_z, sigma_t, tau_zt, L_reinforced, gamma_f=1.2
     """
 
     # break up into chunks of length L_reinforced
-    z_re = np.arange(self.z[0], self.z[-1], L_reinforced)
-    if (z_re[-1] != self.z[-1]):
-        z_re = np.r_[z_re, self.z[-1]]
+    z_re = np.arange(z[0], z[-1], L_reinforced)
+    if (z_re[-1] != z[-1]):
+        z_re = np.r_[z_re, z[-1]]
 
     # initialize
     constraint = np.zeros(npt * (len(z_re) - 1))
@@ -51,11 +51,11 @@ def shellBuckling(self, npt, sigma_z, sigma_t, tau_zt, L_reinforced, gamma_f=1.2
         tau_zt_line = tau_zt[j::npt]
 
         # interpolate into sections
-        d_re = np.interp(z_re, self.z, self.d)
-        t_re = np.interp(z_re, self.z, self.t)
-        sigma_z_re = np.interp(z_re, self.z, sigma_z_line)
-        sigma_t_re = np.interp(z_re, self.z, sigma_t_line)
-        tau_zt_re = np.interp(z_re, self.z, tau_zt_line)
+        d_re = np.interp(z_re, z, d)
+        t_re = np.interp(z_re, z, t)
+        sigma_z_re = np.interp(z_re, z, sigma_z_line)
+        sigma_t_re = np.interp(z_re, z, sigma_t_line)
+        tau_zt_re = np.interp(z_re, z, tau_zt_line)
 
         for i in range(len(z_re)-1):
             h = z_re[i+1] - z_re[i]
@@ -73,13 +73,13 @@ def shellBuckling(self, npt, sigma_z, sigma_t, tau_zt, L_reinforced, gamma_f=1.2
             sigma_t_shell = gamma_f*abs(sigma_t_shell)
             tau_zt_shell = gamma_f*abs(tau_zt_shell)
 
-            constraint[i*4 + j] = self.__shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z_shell, sigma_t_shell, tau_zt_shell)
+            constraint[i*npt + j] = _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z_shell, sigma_t_shell, tau_zt_shell, E, sigma_y)
 
     return z_re[0:-1], constraint
 
 
 
-def __cubicspline(self, ptL, ptR, fL, fR, gL, gR, pts):
+def _cubicspline(ptL, ptR, fL, fR, gL, gR, pts):
 
     A = np.array([[ptL**3, ptL**2, ptL, 1],
                   [ptR**3, ptR**2, ptR, 1],
@@ -94,7 +94,7 @@ def __cubicspline(self, ptL, ptR, fL, fR, gL, gR, pts):
     return value
 
 
-def __cxsmooth(self, omega, rovert):
+def _cxsmooth(omega, rovert):
 
     Cxb = 6.0  # clamped-clamped
     constant = 1 + 1.83/1.7 - 2.07/1.7**2
@@ -118,7 +118,7 @@ def __cxsmooth(self, omega, rovert):
         fR = 1.0
         gL = 1.83/ptL1**2 - 4.14/ptL1**3
         gR = 0.0
-        Cx = self.__cubicspline(ptL1, ptR1, fL, fR, gL, gR, omega)
+        Cx = _cubicspline(ptL1, ptR1, fL, fR, gL, gR, omega)
 
     elif omega > ptR1 and omega < ptL2:
         Cx = 1.0
@@ -129,7 +129,7 @@ def __cxsmooth(self, omega, rovert):
         fR = 1 + 0.2/Cxb*(1-2.0*ptR2/rovert)
         gL = 0.0
         gR = -0.4/Cxb/rovert
-        Cx = self.__cubicspline(ptL2, ptR2, fL, fR, gL, gR, omega)
+        Cx = _cubicspline(ptL2, ptR2, fL, fR, gL, gR, omega)
 
     elif omega > ptR2 and omega < ptL3:
         Cx = 1 + 0.2/Cxb*(1-2.0*omega/rovert)
@@ -140,7 +140,7 @@ def __cxsmooth(self, omega, rovert):
         fR = 0.6
         gL = -0.4/Cxb/rovert
         gR = 0.0
-        Cx = self.__cubicspline(ptL3, ptR3, fL, fR, gL, gR, omega)
+        Cx = _cubicspline(ptL3, ptR3, fL, fR, gL, gR, omega)
 
     else:
         Cx = 0.6
@@ -148,7 +148,7 @@ def __cxsmooth(self, omega, rovert):
     return Cx
 
 
-def __sigmasmooth(self, omega, E, rovert):
+def _sigmasmooth(omega, E, rovert):
 
     Ctheta = 1.5  # clamped-clamped
 
@@ -173,7 +173,7 @@ def __sigmasmooth(self, omega, E, rovert):
         gL = -0.92*E*Ctheta/rovert/ptL**2
         gR = -E*(1.0/rovert)*2.03*4*(Ctheta/ptR*rovert)**3*Ctheta/ptR**2
 
-        sigma = self.__cubicspline(ptL, ptR, fL, fR, gL, gR, omega)
+        sigma = _cubicspline(ptL, ptR, fL, fR, gL, gR, omega)
 
     else:
 
@@ -183,7 +183,7 @@ def __sigmasmooth(self, omega, E, rovert):
     return sigma
 
 
-def __tausmooth(self, omega, rovert):
+def _tausmooth(omega, rovert):
 
     ptL1 = 9
     ptR1 = 11
@@ -199,7 +199,7 @@ def __tausmooth(self, omega, rovert):
         fR = 1.0
         gL = -63.0/ptL1**4/fL
         gR = 0.0
-        C_tau = self.__cubicspline(ptL1, ptR1, fL, fR, gL, gR, omega)
+        C_tau = _cubicspline(ptL1, ptR1, fL, fR, gL, gR, omega)
 
     elif omega > ptR1 and omega < ptL2:
         C_tau = 1.0
@@ -209,7 +209,7 @@ def __tausmooth(self, omega, rovert):
         fR = 1.0/3.0*sqrt(ptR2/rovert) + 1 - sqrt(8.7)/3
         gL = 0.0
         gR = 1.0/6/sqrt(ptR2*rovert)
-        C_tau = self.__cubicspline(ptL2, ptR2, fL, fR, gL, gR, omega)
+        C_tau = _cubicspline(ptL2, ptR2, fL, fR, gL, gR, omega)
 
     else:
         C_tau = 1.0/3.0*sqrt(omega/rovert) + 1 - sqrt(8.7)/3
@@ -218,7 +218,7 @@ def __tausmooth(self, omega, rovert):
 
 
 
-def __shellBucklingOneSection(self, h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t, tau_zt):
+def _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t, tau_zt, E, sigma_y):
     """
     Estimate shell buckling for one tapered cylindrical shell section.
 
@@ -240,9 +240,6 @@ def __shellBucklingOneSection(self, h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t
 
     """
 
-    E = self.E
-    sigma_y = self.sigma_y
-
     #NOTE: definition of r1, r2 switched from Eurocode document to be consistent with FEM.
 
     # ----- geometric parameters --------
@@ -258,7 +255,7 @@ def __shellBucklingOneSection(self, h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t
     rovert = re/t
 
     # compute Cx
-    Cx = self.__cxsmooth(omega, rovert)
+    Cx = _cxsmooth(omega, rovert)
 
 
     # if omega <= 1.7:
@@ -281,7 +278,7 @@ def __shellBucklingOneSection(self, h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t
     delta_wk = 1.0/Q*sqrt(rovert)*t
     alpha_z = 0.62/(1 + 1.91*delta_wk/t)**1.44
 
-    chi_z = self.__buckling_reduction_factor(alpha_z, beta_z, eta_z, lambda_z0, lambda_z)
+    chi_z = _buckling_reduction_factor(alpha_z, beta_z, eta_z, lambda_z0, lambda_z)
 
     # design buckling stress
     sigma_z_Rk = chi_z*sigma_y
@@ -306,7 +303,7 @@ def __shellBucklingOneSection(self, h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t
     # else:
     #     sigma_t_Rcr = 0.92*E*Ctheta/omega/rovert
 
-    sigma_t_Rcr = self.__sigmasmooth(omega, E, rovert)
+    sigma_t_Rcr = _sigmasmooth(omega, E, rovert)
 
     # buckling reduction factor
     alpha_t = 0.65  # high fabrication quality
@@ -315,7 +312,7 @@ def __shellBucklingOneSection(self, h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t
     eta_t = 1.0
     lambda_t = sqrt(sigma_y/sigma_t_Rcr)
 
-    chi_theta = self.__buckling_reduction_factor(alpha_t, beta_t, eta_t, lambda_t0, lambda_t)
+    chi_theta = _buckling_reduction_factor(alpha_t, beta_t, eta_t, lambda_t0, lambda_t)
 
     sigma_t_Rk = chi_theta*sigma_y
     sigma_t_Rd = sigma_t_Rk/gamma_b
@@ -335,7 +332,7 @@ def __shellBucklingOneSection(self, h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t
     #     C_tau = 1.0/3.0*sqrt(omega/rovert)
     # else:
     #     C_tau = 1.0
-    C_tau = self.__tausmooth(omega, rovert)
+    C_tau = _tausmooth(omega, rovert)
 
     tau_zt_Rcr = 0.75*E*C_tau*sqrt(1.0/omega)/rovert
 
@@ -346,7 +343,7 @@ def __shellBucklingOneSection(self, h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t
     eta_tau = 1.0
     lambda_tau = sqrt(sigma_y/sqrt(3)/tau_zt_Rcr)
 
-    chi_tau = self.__buckling_reduction_factor(alpha_tau, beta_tau, eta_tau, lambda_tau0, lambda_tau)
+    chi_tau = _buckling_reduction_factor(alpha_tau, beta_tau, eta_tau, lambda_tau0, lambda_tau)
 
     tau_zt_Rk = chi_tau*sigma_y/sqrt(3)
     tau_zt_Rd = tau_zt_Rk/gamma_b
@@ -370,7 +367,7 @@ def __shellBucklingOneSection(self, h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t
 
 
 
-def __buckling_reduction_factor(self, alpha, beta, eta, lambda_0, lambda_bar):
+def _buckling_reduction_factor(alpha, beta, eta, lambda_0, lambda_bar):
     """
     Computes a buckling reduction factor used in Eurocode shell buckling formula.
     """
@@ -391,7 +388,7 @@ def __buckling_reduction_factor(self, alpha, beta, eta, lambda_0, lambda_bar):
         gL = 0.0
         gR = -beta*eta*fracR**(eta-1)/(lambda_p-lambda_0)
 
-        chi = self.__cubicspline(ptL, ptR, fL, fR, gL, gR, lambda_bar)
+        chi = _cubicspline(ptL, ptR, fL, fR, gL, gR, lambda_bar)
 
     elif lambda_bar > ptR and lambda_bar < lambda_p:
         chi = 1.0 - beta*((lambda_bar-lambda_0)/(lambda_p-lambda_0))**eta
