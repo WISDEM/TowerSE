@@ -7,8 +7,96 @@ Created by Andrew Ning on 2012-01-20.
 Copyright (c) NREL. All rights reserved.
 """
 
-from math import sqrt, cos, atan2
+from math import sqrt, cos, atan2, pi
 import numpy as np
+from wisdem.common.utilities import cubicSpline
+
+
+
+def fatigue(M_DEL, N_DEL, d, t, m=4, DC=80.0, eta=1.265, stress_factor=1.0, weld_factor=True):
+    """estimate fatigue damage for tower station
+
+    Parmeters
+    ---------
+    M_DEL : array_like(float) (N*m)
+        damage equivalent moment at tower section
+    N_DEL : array_like(int)
+        corresponding number of cycles in lifetime
+    d : array_like(float) (m)
+        tower diameter at section
+    t : array_like(float) (m)
+        tower shell thickness at section
+    m : int
+        slope of S/N curve
+    DC : float (N/mm**2)
+        some max stress from a standard
+    eta : float
+        safety factor
+    stress_factor : float
+        load_factor * stress_concentration_factor
+    weld_factor : bool
+        if True include an empirical weld factor
+
+    Returns
+    -------
+    damage : float
+        damage from Miner's rule for this tower section
+    """
+
+
+    # convert to mm
+    dvec = np.array(d)*1e3
+    tvec = np.array(t)*1e3
+
+    nvec = len(d)
+    damage = np.zeros(nvec)
+
+    # initialize weld factor (added cubic spline around corner)
+    if weld_factor:
+        x1 = 24.0
+        x2 = 26.0
+        coeff = cubicSpline(x1, x2, 1.0, (25.0/x2)**0.25, 0.0, 25.0**0.25*-0.25*x2**-1.25)
+
+
+    for i in range(nvec):
+
+        d = dvec[i]
+        t = tvec[i]
+
+        # weld factor
+        if not weld_factor or t <= x1:
+            weld = 1.0
+        elif t >= x2:
+            weld = (25.0/t)**0.25
+        else:
+            weld = np.polyval(coeff, t)
+
+
+        # stress
+        r = d/2.0
+        I = pi*r**3*t
+        c = r
+        sigma = M_DEL[i]*c/I * stress_factor * 1e3  # convert to N/mm^2
+
+        # maximum allowed stress
+        Smax = DC * weld / eta
+
+        # number of cycles to failure
+        Nf = (Smax/sigma)**m
+
+        # number of cycles for this load
+        N1 = 2e6  # TODO: where does this come from?
+        N = N_DEL[i]/N1
+
+        # damage
+        damage[i] = N/Nf
+
+    return damage
+
+
+
+
+
 
 
 def shellBuckling(z, d, t, npt, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma_y, gamma_f=1.2, gamma_b=1.1):
@@ -79,20 +167,6 @@ def shellBuckling(z, d, t, npt, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma
 
 
 
-def _cubicspline(ptL, ptR, fL, fR, gL, gR, pts):
-
-    A = np.array([[ptL**3, ptL**2, ptL, 1],
-                  [ptR**3, ptR**2, ptR, 1],
-                  [3*ptL**2, 2*ptL, 1, 0],
-                  [3*ptR**2, 2*ptR, 1, 0]])
-    b = np.array([fL, fR, gL, gR])
-
-    coeff = np.linalg.solve(A, b)
-
-    value = coeff[0]*pts**3 + coeff[1]*pts**2 + coeff[2]*pts + coeff[3]
-
-    return value
-
 
 def _cxsmooth(omega, rovert):
 
@@ -118,7 +192,7 @@ def _cxsmooth(omega, rovert):
         fR = 1.0
         gL = 1.83/ptL1**2 - 4.14/ptL1**3
         gR = 0.0
-        Cx = _cubicspline(ptL1, ptR1, fL, fR, gL, gR, omega)
+        Cx = cubicSpline(ptL1, ptR1, fL, fR, gL, gR, omega)
 
     elif omega > ptR1 and omega < ptL2:
         Cx = 1.0
@@ -129,7 +203,7 @@ def _cxsmooth(omega, rovert):
         fR = 1 + 0.2/Cxb*(1-2.0*ptR2/rovert)
         gL = 0.0
         gR = -0.4/Cxb/rovert
-        Cx = _cubicspline(ptL2, ptR2, fL, fR, gL, gR, omega)
+        Cx = cubicSpline(ptL2, ptR2, fL, fR, gL, gR, omega)
 
     elif omega > ptR2 and omega < ptL3:
         Cx = 1 + 0.2/Cxb*(1-2.0*omega/rovert)
@@ -140,7 +214,7 @@ def _cxsmooth(omega, rovert):
         fR = 0.6
         gL = -0.4/Cxb/rovert
         gR = 0.0
-        Cx = _cubicspline(ptL3, ptR3, fL, fR, gL, gR, omega)
+        Cx = cubicSpline(ptL3, ptR3, fL, fR, gL, gR, omega)
 
     else:
         Cx = 0.6
@@ -173,7 +247,7 @@ def _sigmasmooth(omega, E, rovert):
         gL = -0.92*E*Ctheta/rovert/ptL**2
         gR = -E*(1.0/rovert)*2.03*4*(Ctheta/ptR*rovert)**3*Ctheta/ptR**2
 
-        sigma = _cubicspline(ptL, ptR, fL, fR, gL, gR, omega)
+        sigma = cubicSpline(ptL, ptR, fL, fR, gL, gR, omega)
 
     else:
 
@@ -199,7 +273,7 @@ def _tausmooth(omega, rovert):
         fR = 1.0
         gL = -63.0/ptL1**4/fL
         gR = 0.0
-        C_tau = _cubicspline(ptL1, ptR1, fL, fR, gL, gR, omega)
+        C_tau = cubicSpline(ptL1, ptR1, fL, fR, gL, gR, omega)
 
     elif omega > ptR1 and omega < ptL2:
         C_tau = 1.0
@@ -209,7 +283,7 @@ def _tausmooth(omega, rovert):
         fR = 1.0/3.0*sqrt(ptR2/rovert) + 1 - sqrt(8.7)/3
         gL = 0.0
         gR = 1.0/6/sqrt(ptR2*rovert)
-        C_tau = _cubicspline(ptL2, ptR2, fL, fR, gL, gR, omega)
+        C_tau = cubicSpline(ptL2, ptR2, fL, fR, gL, gR, omega)
 
     else:
         C_tau = 1.0/3.0*sqrt(omega/rovert) + 1 - sqrt(8.7)/3

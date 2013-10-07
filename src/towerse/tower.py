@@ -11,10 +11,10 @@ import math
 import numpy as np
 from scipy.optimize import brentq
 from openmdao.main.api import VariableTree, Component, Assembly
-from openmdao.main.datatypes.api import Float, Array, VarTree
+from openmdao.main.datatypes.api import Int, Float, Array, VarTree
 
 from wisdem.common import _akima, sind, cosd, Vector, _pBEAM
-from shellBuckling import shellBuckling
+from towerSupplement import shellBuckling, fatigue
 
 
 
@@ -409,17 +409,17 @@ class TowerStruc(Component):
     gamma_m = Float(1.1, iotype='in', desc='safety factor on materials')
     gamma_n = Float(1.0, iotype='in', desc='safety factor on consequence of failure')
 
-
+    life = Int(20, iotype='in', desc='fatigue life of tower')
 
     # outputs
     mass = Float(iotype='out')
     f1 = Float(iotype='out', units='Hz', desc='first natural frequency')
     f2 = Float(iotype='out', units='Hz', desc='second natural frequency')
     top_deflection = Float(iotype='out', units='m', desc='deflection of tower top in yaw-aligned +x direction')
-    z_stress = Array(iotype='out', units='m', desc='z-locations along tower where stress is evaluted')
     stress = Array(iotype='out', units='N/m**2', desc='von Mises stress along tower on downwind side (yaw-aligned +x).  normalized by yield stress.  includes safety factors.')
     z_buckling = Array(iotype='out', units='m', desc='z-locations along tower where shell buckling is evaluted')
     buckling = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
+    damage = Array(iotype='out', desc='fatigue damage at each tower section')
 
 
     def execute(self):
@@ -496,14 +496,23 @@ class TowerStruc(Component):
         # safety factors
         gamma = self.gamma_f * self.gamma_m * self.gamma_n
 
-        self.z_stress = z
+        # stress
         self.stress = gamma * von_mises / self.sigma_y  # downwind side (yaw-aligned +x)
 
+        # buckling
         gamma_b = self.gamma_m * self.gamma_n
         zb, buckling = shellBuckling(self.z, self.d, self.t, 1, axial_stress, hoop_stress, shear_stress,
                                      self.L_reinforced, self.E, self.sigma_y, self.gamma_f, gamma_b)
         self.z_buckling = zb
         self.buckling = buckling  # yaw-aligned +x side
+
+        # fatigue
+        N_DEL = [365*24*3600*self.life]*nodes
+        M_DEL = My
+        m = 4  # S/N slope
+        DC = 80.0  # max stress
+
+        self.damage = fatigue(M_DEL, N_DEL, d, t, m, DC, gamma, stress_factor=1.0, weld_factor=True)
 
 
 
@@ -590,10 +599,10 @@ class Tower(Assembly):
         self.create_passthrough('tower.f1')
         self.create_passthrough('tower.f2')
         self.create_passthrough('tower.top_deflection')
-        self.create_passthrough('tower.z_stress')
         self.create_passthrough('tower.stress')
         self.create_passthrough('tower.z_buckling')
         self.create_passthrough('tower.buckling')
+        self.create_passthrough('tower.damage')
 
 
 
@@ -637,8 +646,8 @@ if __name__ == '__main__':
     print 'f1 =', tower.f1
     print 'f2 =', tower.f2
     print 'top_deflection =', tower.top_deflection
-    print 'z_stress =', tower.z_stress
     print 'stress =', tower.stress
     print 'z_buckling =', tower.z_buckling
     print 'buckling =', tower.buckling
+    print 'damage =', tower.damage
 
