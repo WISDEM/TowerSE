@@ -462,7 +462,7 @@ def _buckling_reduction_factor(alpha, beta, eta, lambda_0, lambda_bar):
         gL = 0.0
         gR = -beta*eta*fracR**(eta-1)/(lambda_p-lambda_0)
 
-        chi = _cubicspline(ptL, ptR, fL, fR, gL, gR, lambda_bar)
+        chi = cubicSpline(ptL, ptR, fL, fR, gL, gR, lambda_bar)
 
     elif lambda_bar > ptR and lambda_bar < lambda_p:
         chi = 1.0 - beta*((lambda_bar-lambda_0)/(lambda_p-lambda_0))**eta
