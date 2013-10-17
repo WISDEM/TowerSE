@@ -17,7 +17,7 @@ def _sys_path_add(toadd=None):
         distdir = os.path.dirname(os.path.dirname(__file__))
         sys.path = [distdir] + [os.path.join(distdir, p) for p in toadd] + sys.path
 
-_sys_path_add(['src', 'src/wisdem', 'src/wisdem/towerse', 'src/wisdem/towerse/test'])
+_sys_path_add(['src', 'src/towerse', 'src/towerse/test'])
 
 # General configuration
 # ---------------------

@@ -9,12 +9,12 @@ Source Documentation
         
 .. index:: test_towerse.py
 
-.. _wisdem.towerse.test.test_towerse.py:
+.. _towerse.test.test_towerse.py:
 
 test_towerse.py
 ---------------
 
-.. automodule:: wisdem.towerse.test.test_towerse
+.. automodule:: towerse.test.test_towerse
    :members:
    :undoc-members:
    :show-inheritance:
@@ -22,12 +22,12 @@ test_towerse.py
         
 .. index:: tower.py
 
-.. _wisdem.towerse.tower.py:
+.. _towerse.tower.py:
 
 tower.py
 --------
 
-.. automodule:: wisdem.towerse.tower
+.. automodule:: towerse.tower
    :members:
    :undoc-members:
    :show-inheritance:
@@ -35,12 +35,12 @@ tower.py
         
 .. index:: towerSupplement.py
 
-.. _wisdem.towerse.towerSupplement.py:
+.. _towerse.towerSupplement.py:
 
 towerSupplement.py
 ------------------
 
-.. automodule:: wisdem.towerse.towerSupplement
+.. automodule:: towerse.towerSupplement
    :members:
    :undoc-members:
    :show-inheritance:

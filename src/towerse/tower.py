@@ -13,7 +13,7 @@ from scipy.optimize import brentq
 from openmdao.main.api import VariableTree, Component, Assembly
 from openmdao.main.datatypes.api import Int, Float, Array, VarTree
 
-from wisdem.commonse import _akima, sind, cosd, Vector
+from commonse import _akima, sind, cosd, Vector
 import _pBEAM
 from towerSupplement import shellBuckling, fatigue
 

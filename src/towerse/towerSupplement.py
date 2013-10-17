@@ -9,7 +9,7 @@ Copyright (c) NREL. All rights reserved.
 
 from math import sqrt, cos, atan2, pi
 import numpy as np
-from wisdem.commonse.utilities import cubicSpline
+from commonse.utilities import cubicSpline
 
 
 

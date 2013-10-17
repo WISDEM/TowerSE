@@ -12,37 +12,41 @@ Package Metadata
     Intended Audience :: Science/Research
     Topic :: Scientific/Engineering
 
+- **dependency_links:** ['https://github.com/NREL-WISDEM/pBEAM/tarball/master#egg=pBEAM-0.1.0', 'https://github.nrel.gov/sning/CommonSE/tarball/master#egg=wisdem.commonse-0.1.0']
+
 - **description-file:** README.md
 
 - **entry_points**:: 
 
     [openmdao.component]
-    wisdem.towerse.tower.Wind=wisdem.towerse.tower:Wind
-    wisdem.towerse.tower.TowerWindDrag=wisdem.towerse.tower:TowerWindDrag
-    wisdem.towerse.tower.LogWind=wisdem.towerse.tower:LogWind
-    wisdem.towerse.tower.TowerDiscretization=wisdem.towerse.tower:TowerDiscretization
-    wisdem.towerse.tower.TowerWaveDrag=wisdem.towerse.tower:TowerWaveDrag
-    wisdem.towerse.tower.Wave=wisdem.towerse.tower:Wave
-    wisdem.towerse.tower.Tower=wisdem.towerse.tower:Tower
-    wisdem.towerse.tower.Soil=wisdem.towerse.tower:Soil
-    wisdem.towerse.tower.PowerWind=wisdem.towerse.tower:PowerWind
-    wisdem.towerse.tower.TowerSoil=wisdem.towerse.tower:TowerSoil
-    wisdem.towerse.tower.TowerStruc=wisdem.towerse.tower:TowerStruc
-    wisdem.towerse.tower.LinearWaves=wisdem.towerse.tower:LinearWaves
+    towerse.tower.TowerWaveDrag=towerse.tower:TowerWaveDrag
+    towerse.tower.TowerDiscretization=towerse.tower:TowerDiscretization
+    towerse.tower.LogWind=towerse.tower:LogWind
+    towerse.tower.Wind=towerse.tower:Wind
+    towerse.tower.TowerSoil=towerse.tower:TowerSoil
+    towerse.tower.Tower=towerse.tower:Tower
+    towerse.tower.TowerWindDrag=towerse.tower:TowerWindDrag
+    towerse.tower.PowerWind=towerse.tower:PowerWind
+    towerse.tower.Wave=towerse.tower:Wave
+    towerse.tower.LinearWaves=towerse.tower:LinearWaves
+    towerse.tower.TowerStruc=towerse.tower:TowerStruc
+    towerse.tower.Soil=towerse.tower:Soil
     [openmdao.container]
-    wisdem.towerse.tower.Wind=wisdem.towerse.tower:Wind
-    wisdem.towerse.tower.TowerWindDrag=wisdem.towerse.tower:TowerWindDrag
-    wisdem.towerse.tower.Tower=wisdem.towerse.tower:Tower
-    wisdem.towerse.tower.TowerSoil=wisdem.towerse.tower:TowerSoil
-    wisdem.towerse.tower.PowerWind=wisdem.towerse.tower:PowerWind
-    wisdem.towerse.tower.Wave=wisdem.towerse.tower:Wave
-    wisdem.towerse.tower.Soil=wisdem.towerse.tower:Soil
-    wisdem.towerse.tower.LinearWaves=wisdem.towerse.tower:LinearWaves
-    wisdem.towerse.tower.AeroLoads=wisdem.towerse.tower:AeroLoads
-    wisdem.towerse.tower.TowerStruc=wisdem.towerse.tower:TowerStruc
-    wisdem.towerse.tower.TowerDiscretization=wisdem.towerse.tower:TowerDiscretization
-    wisdem.towerse.tower.TowerWaveDrag=wisdem.towerse.tower:TowerWaveDrag
-    wisdem.towerse.tower.LogWind=wisdem.towerse.tower:LogWind
+    towerse.tower.TowerWaveDrag=towerse.tower:TowerWaveDrag
+    towerse.tower.TowerDiscretization=towerse.tower:TowerDiscretization
+    towerse.tower.AeroLoads=towerse.tower:AeroLoads
+    towerse.tower.Wind=towerse.tower:Wind
+    towerse.tower.TowerSoil=towerse.tower:TowerSoil
+    towerse.tower.Tower=towerse.tower:Tower
+    towerse.tower.TowerWindDrag=towerse.tower:TowerWindDrag
+    towerse.tower.PowerWind=towerse.tower:PowerWind
+    towerse.tower.Wave=towerse.tower:Wave
+    towerse.tower.LinearWaves=towerse.tower:LinearWaves
+    towerse.tower.Soil=towerse.tower:Soil
+    towerse.tower.TowerStruc=towerse.tower:TowerStruc
+    towerse.tower.LogWind=towerse.tower:LogWind
+
+- **install_requires:** ['openmdao.main', 'pBEAM', 'wisdem.commonse']
 
 - **keywords:** openmdao
 
@@ -50,7 +54,7 @@ Package Metadata
 
 - **name:** towerse
 
-- **requires-dist:** openmdao.main, pBEAM
+- **requires-dist:** openmdao.main
 
 - **requires-python**:: 
 
