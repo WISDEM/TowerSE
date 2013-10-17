@@ -1,3 +1,0 @@
-[submodule "src/wisdem/common"]
-	path = src/wisdem/common
-	url = https://github.nrel.gov/sning/CommonSE.git
