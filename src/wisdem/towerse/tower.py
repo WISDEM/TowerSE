@@ -13,7 +13,8 @@ from scipy.optimize import brentq
 from openmdao.main.api import VariableTree, Component, Assembly
 from openmdao.main.datatypes.api import Int, Float, Array, VarTree
 
-from wisdem.common import _akima, sind, cosd, Vector, _pBEAM
+from wisdem.commonse import _akima, sind, cosd, Vector
+import _pBEAM
 from towerSupplement import shellBuckling, fatigue
 
 
@@ -120,10 +121,12 @@ class Soil(Component):
 class PowerWind(Wind):
     """power-law profile wind"""
 
-    # ---------- in -----------------
+    # variables
     Uref = Float(iotype='in', units='m/s', desc='reference velocity of power-law model')
     zref = Float(iotype='in', units='m', desc='corresponding reference height')
     z0 = Float(0.0, iotype='in', units='m', desc='bottom of wind profile (height of ground/sea)')
+
+    # parameters
     shearExp = Float(0.2, iotype='in', desc='shear exponent')
     betaWind = Float(0.0, iotype='in', units='deg', desc='wind angle relative to inertial coordinate system')
 
@@ -137,9 +140,28 @@ class PowerWind(Wind):
 
         # velocity
         self.U = np.zeros_like(z)
-        idx = [z > z0]
+        idx = z > z0
         self.U[idx] = self.Uref*((z[idx] - z0)/(zref - z0))**self.shearExp
         self.beta = self.betaWind*np.ones_like(z)
+
+
+    def calculate_first_derivatives(self):
+
+        # rename
+        z = self.z
+        zref = self.zref
+        z0 = self.z0
+
+        self.dU_dUref = np.zeros_like(z)
+        self.dU_dz = np.zeros_like(z)
+        self.dU_dzref = np.zeros_like(z)
+        self.dU_dz0 = np.zeros_like(z)
+
+        idx = z > z0
+        self.dU_dUref[idx] = ((z[idx] - z0)/(zref - z0))**self.shearExp
+        self.dU_dz[idx] = self.U[idx]*self.shearExp * 1.0/(z[idx] - z0)
+        self.dU_dzref[idx] = self.U[idx]*self.shearExp * -1.0/(zref - z0)
+        self.dU_dz0[idx] = self.U[idx]*self.shearExp * (1.0/(zref - z0) - 1.0/(z[idx] - z0))
 
 
 
