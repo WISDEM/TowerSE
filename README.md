@@ -1,7 +1,7 @@
 TowerSE
 =======
 
-Systems Engineering Model of Wind Turbine Towers
+Systems Engineering Model of Wind Turbine Towers (OpenMDAO plugin)
 
 To install (for development purposes, the packaged version does all these steps for you):
 
