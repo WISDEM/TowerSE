@@ -374,7 +374,7 @@ class TowerStruc(Component):
         gamma = self.gamma_f * self.gamma_m * self.gamma_n
 
         # stress
-        self.stress = gamma * von_mises / self.sigma_y  # downwind side (yaw-aligned +x)
+        self.stress = gamma * von_mises / self.sigma_y - 1  # downwind side (yaw-aligned +x)
 
         # buckling
         gamma_b = self.gamma_m * self.gamma_n
@@ -475,6 +475,7 @@ class Tower(Assembly):
 
         self.create_passthrough('tower.L_reinforced')
         self.create_passthrough('tower.yaw')
+        self.create_passthrough('tower.g')
         self.create_passthrough('tower.top_F')
         self.create_passthrough('tower.top_M')
         self.create_passthrough('tower.E')
@@ -484,6 +485,7 @@ class Tower(Assembly):
         self.create_passthrough('tower.gamma_f')
         self.create_passthrough('tower.gamma_m')
         self.create_passthrough('tower.gamma_n')
+        self.create_passthrough('tower.life')
 
 
         self.create_passthrough('tower.mass')
