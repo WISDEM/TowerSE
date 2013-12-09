@@ -99,7 +99,7 @@ def fatigue(M_DEL, N_DEL, d, t, m=4, DC=80.0, eta=1.265, stress_factor=1.0, weld
 
 
 
-def shellBuckling(z, d, t, npt, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma_y, gamma_f=1.2, gamma_b=1.1):
+def shellBuckling(z, d, t, npt, sigma_z, sigma_t, tau_zt, z_reinforced, E, sigma_y, gamma_f=1.2, gamma_b=1.1):
     """
     Estimate shell buckling constraint along tower.
 
@@ -123,9 +123,11 @@ def shellBuckling(z, d, t, npt, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma
     """
 
     # break up into chunks of length L_reinforced
-    z_re = np.arange(z[0], z[-1], L_reinforced)
-    if (z_re[-1] != z[-1]):
-        z_re = np.r_[z_re, z[-1]]
+    # z_re = np.arange(z[0], z[-1], L_reinforced)
+    # if (z_re[-1] != z[-1]):
+    #     z_re = np.r_[z_re, z[-1]]
+
+    z_re = z_reinforced
 
     # initialize
     constraint = np.zeros(npt * (len(z_re) - 1))

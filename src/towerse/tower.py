@@ -167,11 +167,13 @@ class TowerDiscretization(Component):
     d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
     t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
     n = Array(iotype='in', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
+    n_reinforced = Int(iotype='in', desc='must be a minimum of 1 (top and bottom)')
 
     # out
     z_node = Array(iotype='out', units='m', desc='locations along tower, linear lofting between')
     d_node = Array(iotype='out', units='m', desc='tower diameter at corresponding locations')
     t_node = Array(iotype='out', units='m', desc='shell thickness at corresponding locations')
+    z_reinforced = Array(iotype='out')
 
     def execute(self):
 
@@ -184,6 +186,9 @@ class TowerDiscretization(Component):
         # interpolate
         self.d_node = np.interp(self.z_node, self.z, self.d)
         self.t_node = np.interp(self.z_node, self.z, self.t)
+
+        # reinforcement distances
+        self.z_reinforced = np.linspace(self.z[0], self.z[-1], self.n_reinforced+1)
 
 
 
@@ -255,7 +260,7 @@ class TowerStruc(Component):
     z = Array(iotype='in', units='m', desc='locations along tower')
     d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
     t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
-    L_reinforced = Float(iotype='in', units='m', desc='reinforcement length for buckling')
+    z_reinforced = Array(iotype='in', units='m', desc='reinforcement positions for buckling')
     yaw = Float(0.0, iotype='in', units='deg')
 
     # wind/wave loads
@@ -357,7 +362,7 @@ class TowerStruc(Component):
         # hoop_stress (Eurocode method)
         C_theta = 1.5
         r = d/2.0
-        omega = self.L_reinforced/np.sqrt(r*t)
+        omega = (self.z_reinforced[-1] - self.z_reinforced[0])/np.sqrt(r*t)
         k_w = 0.46*(1.0 + 0.1*np.sqrt(C_theta/omega*r/t))
         k_w = np.maximum(0.65, np.minimum(1.0, k_w))
         q_dyn = np.interp(z, wind.z, wind.q) + np.interp(z, wave.z, wave.q)
@@ -379,7 +384,7 @@ class TowerStruc(Component):
         # buckling
         gamma_b = self.gamma_m * self.gamma_n
         zb, buckling = shellBuckling(self.z, self.d, self.t, 1, axial_stress, hoop_stress, shear_stress,
-                                     self.L_reinforced, self.E, self.sigma_y, self.gamma_f, gamma_b)
+                                     self.z_reinforced, self.E, self.sigma_y, self.gamma_f, gamma_b)
         self.z_buckling = zb
         self.buckling = buckling  # yaw-aligned +x side
 
@@ -449,6 +454,7 @@ class Tower(Assembly):
         self.connect('geometry.z_node', 'tower.z')
         self.connect('geometry.d_node', 'tower.d')
         self.connect('geometry.t_node', 'tower.t')
+        self.connect('geometry.z_reinforced', 'tower.z_reinforced')
         self.connect('windLoads.windLoads', 'tower.windLoads')
         self.connect('waveLoads.waveLoads', 'tower.waveLoads')
         self.connect('soil.k', 'tower.k_soil')
@@ -461,6 +467,7 @@ class Tower(Assembly):
         self.create_passthrough('geometry.d')
         self.create_passthrough('geometry.t')
         self.create_passthrough('geometry.n')
+        self.create_passthrough('geometry.n_reinforced')
 
         self.create_passthrough('rna.blade_mass')
         self.create_passthrough('rna.hub_mass')
@@ -473,7 +480,6 @@ class Tower(Assembly):
         self.create_passthrough('rna.nac_I')
 
 
-        self.create_passthrough('tower.L_reinforced')
         self.create_passthrough('tower.yaw')
         self.create_passthrough('tower.g')
         self.create_passthrough('tower.top_F')
