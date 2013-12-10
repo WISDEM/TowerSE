@@ -14,7 +14,6 @@ from openmdao.main.datatypes.api import Int, Float, Array, VarTree
 
 from commonse import _akima, sind, cosd, Vector
 from commonse.environment import Wind, Wave, Soil
-import _pBEAM
 from towerSupplement import shellBuckling, fatigue
 
 
@@ -249,7 +248,6 @@ class RNAMass(Component):
 
 
 
-
 class TowerStruc(Component):
     """structural analysis of cylindrical tower
 
@@ -290,6 +288,11 @@ class TowerStruc(Component):
     gamma_n = Float(1.0, iotype='in', desc='safety factor on consequence of failure')
 
     life = Int(20, iotype='in', desc='fatigue life of tower')
+    m_SN = Int(4, iotype='in', desc='slope of S/N curve')
+    DC = Float(80.0, iotype='in', desc='standard value of stress')
+    gamma_fatigue = Float(1.485, iotype='in', desc='total safety factor for fatigue')
+    z_DEL = Array(iotype='in')
+    M_DEL = Array(iotype='in')
 
     # outputs
     mass = Float(iotype='out')
@@ -302,13 +305,8 @@ class TowerStruc(Component):
     damage = Array(iotype='out', desc='fatigue damage at each tower section')
 
 
-    def execute(self):
-
-        z = self.z
-        d = self.d
-        t = self.t
-        nodes = len(z)
-
+    def aerohydroLoadsAtNodes(self):
+        """rotate wind loads to yaw c.s. and interpolate onto nodes"""
 
         # aero/hydro loads
         wind = self.windLoads
@@ -318,9 +316,91 @@ class TowerStruc(Component):
         windLoads = wind.P.toDirVec().inertialToWind(betaMain).windToYaw(self.yaw)
         waveLoads = wave.P.toDirVec().inertialToWind(betaMain).windToYaw(self.yaw)
 
-        Px = np.interp(z, wind.z, windLoads.x) + np.interp(z, wave.z, waveLoads.x)
-        Py = np.interp(z, wind.z, windLoads.y) + np.interp(z, wave.z, waveLoads.y)
-        Pz = np.interp(z, wind.z, windLoads.z) + np.interp(z, wave.z, waveLoads.z)
+        Px = np.interp(self.z, wind.z, windLoads.x) + np.interp(self.z, wave.z, waveLoads.x)
+        Py = np.interp(self.z, wind.z, windLoads.y) + np.interp(self.z, wave.z, waveLoads.y)
+        Pz = np.interp(self.z, wind.z, windLoads.z) + np.interp(self.z, wave.z, waveLoads.z)
+
+
+        return Px, Py, Pz
+
+
+    def hoopStressEurocode(self):
+        """default method for computing hoop stress using Eurocode method"""
+
+        wind = self.windLoads
+        wave = self.waveLoads
+        r = self.d/2.0
+        t = self.t
+
+        C_theta = 1.5
+        omega = (self.z_reinforced[1] - self.z_reinforced[0])/np.sqrt(r*t)
+        k_w = 0.46*(1.0 + 0.1*np.sqrt(C_theta/omega*r/t))
+        k_w = np.maximum(0.65, np.minimum(1.0, k_w))
+        q_dyn = np.interp(self.z, wind.z, wind.q) + np.interp(self.z, wave.z, wave.q)
+        Peq = k_w*q_dyn
+        hoop_stress = -Peq*r/t
+
+        return hoop_stress
+
+
+    def vonMisesStressMargin(self, axial_stress, hoop_stress, shear_stress):
+        """combine stress for von Mises"""
+
+        # von mises stress
+        a = ((axial_stress + hoop_stress)/2.0)**2
+        b = ((axial_stress - hoop_stress)/2.0)**2
+        c = shear_stress**2
+        von_mises = np.sqrt(a + 3.0*(b+c))
+
+        # safety factor
+        gamma = self.gamma_f * self.gamma_m * self.gamma_n
+
+        # stress margin
+        stress_margin = gamma * von_mises / self.sigma_y - 1
+
+        return stress_margin
+
+
+    def shellBucklingEurocode(self, axial_stress, hoop_stress, shear_stress):
+        """default method to compute shell buckling using Eurocode method"""
+
+        # buckling
+        gamma_b = self.gamma_m * self.gamma_n
+        zb, buckling = shellBuckling(self.z, self.d, self.t, 1, axial_stress, hoop_stress, shear_stress,
+                                     self.z_reinforced, self.E, self.sigma_y, self.gamma_f, gamma_b)
+
+        return zb, buckling
+
+
+    def fatigue(self):
+        """compute damage from provided damage equivalent moments"""
+
+        # fatigue
+        N_DEL = [365*24*3600*self.life]*len(self.z)
+        M_DEL = np.interp(self.z, self.z_DEL, self.M_DEL)
+
+        damage = fatigue(M_DEL, N_DEL, self.d, self.t, self.m_SN, self.DC, self.gamma_fatigue, stress_factor=1.0, weld_factor=True)
+
+        return damage
+
+
+
+class TowerWithpBEAM(TowerStruc):
+
+    import _pBEAM
+
+
+    def execute(self):
+
+        _pBEAM = self._pBEAM
+        z = self.z
+        d = self.d
+        t = self.t
+        nodes = len(z)
+
+
+        # aero/hydro loads
+        Px, Py, Pz = self.aerohydroLoadsAtNodes()
 
         # add weight loads
         Pz_weight = -self.rho*self.g*math.pi*d*t
@@ -360,41 +440,245 @@ class TowerStruc(Component):
         shear_stress = 2 * Vx / A
 
         # hoop_stress (Eurocode method)
-        C_theta = 1.5
-        r = d/2.0
-        omega = (self.z_reinforced[-1] - self.z_reinforced[0])/np.sqrt(r*t)
-        k_w = 0.46*(1.0 + 0.1*np.sqrt(C_theta/omega*r/t))
-        k_w = np.maximum(0.65, np.minimum(1.0, k_w))
-        q_dyn = np.interp(z, wind.z, wind.q) + np.interp(z, wave.z, wave.q)
-        Peq = k_w*q_dyn
-        hoop_stress = -Peq*r/t
+        hoop_stress = self.hoopStressEurocode()
 
         # von mises stress
-        a = ((axial_stress + hoop_stress)/2.0)**2
-        b = ((axial_stress - hoop_stress)/2.0)**2
-        c = shear_stress**2
-        von_mises = np.sqrt(a + 3.0*(b+c))
-
-        # safety factors
-        gamma = self.gamma_f * self.gamma_m * self.gamma_n
-
-        # stress
-        self.stress = gamma * von_mises / self.sigma_y - 1  # downwind side (yaw-aligned +x)
+        self.stress = self.vonMisesStressMargin(axial_stress, hoop_stress, shear_stress)
 
         # buckling
-        gamma_b = self.gamma_m * self.gamma_n
-        zb, buckling = shellBuckling(self.z, self.d, self.t, 1, axial_stress, hoop_stress, shear_stress,
-                                     self.z_reinforced, self.E, self.sigma_y, self.gamma_f, gamma_b)
-        self.z_buckling = zb
-        self.buckling = buckling  # yaw-aligned +x side
+        self.z_buckling, self.buckling = self.shellBucklingEurocode(axial_stress, hoop_stress, shear_stress)
 
         # fatigue
-        N_DEL = [365*24*3600*self.life]*nodes
-        M_DEL = My
-        m = 4  # S/N slope
-        DC = 80.0  # max stress
+        self.damage = self.fatigue()
 
-        self.damage = fatigue(M_DEL, N_DEL, d, t, m, DC, gamma, stress_factor=1.0, weld_factor=True)
+
+
+class TowerWithFrame3DD(TowerStruc):
+
+    import frame3dd
+
+    def execute(self):
+
+        frame3dd = self.frame3dd
+
+        # ------- node data ----------------
+        n = len(self.z)
+        node = np.arange(1, n+1)
+        x = np.zeros(n)
+        y = np.zeros(n)
+        z = self.z
+        r = np.zeros(n)
+
+        # add top mass
+        ntop = n + 1
+        nodeT = np.arange(1, ntop+1)
+        xT = np.concatenate([x, [self.top_cm[0]]])
+        yT = np.concatenate([y, [self.top_cm[1]]])
+        zT = np.concatenate([z, [self.top_cm[2]]])
+        rT = np.concatenate([r, [0.0]])
+
+        nodes = frame3dd.NodeData(nodeT, xT, yT, zT, rT)
+        # -----------------------------------
+
+        # ------ reaction data ------------
+
+        # rigid base
+        node = np.array([1])
+        Rx = np.ones(1)
+        Ry = np.ones(1)
+        Rz = np.ones(1)
+        Rxx = np.ones(1)
+        Ryy = np.ones(1)
+        Rzz = np.ones(1)
+
+        reactions = frame3dd.ReactionData(node, Rx, Ry, Rz, Rxx, Ryy, Rzz)
+        # -----------------------------------
+
+
+        # ------ frame element data ------------
+        d = (self.d[:-1] + self.d[1:])/2.0  # average for element with constant properties
+        t = (self.t[:-1] + self.t[1:])/2.0  # average for element with constant properties
+        ro = d/2.0 + t/2.0
+        ri = d/2.0 - t/2.0
+
+        element = np.arange(1, n)
+        N1 = np.arange(1, n)
+        N2 = np.arange(2, n+1)
+        Ax = math.pi * (ro**2 - ri**2)
+        Asy = Ax / (0.54414 + 2.97294*(ri/ro) - 1.51899*(ri/ro)**2)
+        Asz = Ax / (0.54414 + 2.97294*(ri/ro) - 1.51899*(ri/ro)**2)
+        Jx = math.pi/2.0 * (ro**4 - ri**4)
+        Iy = Jx/2.0
+        Iz = Jx/2.0
+        E = self.E*np.ones(n-1)
+        G = self.G*np.ones(n-1)
+        roll = np.zeros(n-1)
+        density = self.rho*np.ones(n-1)
+
+        # add fake top element
+        element = np.arange(1, ntop)
+        N1 = np.arange(1, ntop)
+        N2 = np.arange(2, ntop+1)
+        Ax = np.concatenate([Ax, [1.0]])
+        Asy = np.concatenate([Asy, [1.0]])
+        Asz = np.concatenate([Asz, [1.0]])
+        Jx = np.concatenate([Jx, [1.0]])
+        Iy = np.concatenate([Iy, [1.0]])
+        Iz = np.concatenate([Iz, [1.0]])
+        E = np.concatenate([E, [1e15]])
+        G = np.concatenate([G, [1e15]])
+        roll = np.concatenate([roll, [0.0]])
+        density = np.concatenate([density, [1e-6]])
+
+        elements = frame3dd.ElementData(element, N1, N2, Ax, Asy, Asz, Jx, Iy, Iz, E, G, roll, density)
+
+        # -----------------------------------
+
+
+        # ------ other data ------------
+
+        shear = 1               # 1: include shear deformation
+        geom = 1                # 1: include geometric stiffness
+        exagg_static = 1.0     # exaggerate mesh deformations
+        dx = 10.0               # x-axis increment for internal forces
+
+        other = frame3dd.OtherData(shear, geom, exagg_static, dx)
+
+        # -----------------------------------
+
+        # initialize frame3dd object
+        tower = frame3dd.Frame(nodes, reactions, elements, other)
+
+
+        # ------ static load case 1 ------------
+
+        # gravity in the X, Y, Z, directions (global)
+        gx = 0.0
+        gy = 0.0
+        gz = -self.g
+
+        load = frame3dd.StaticLoadCase(gx, gy, gz)
+
+        # tower top load
+
+        nF = np.array([n])
+        Fx = np.array([self.top_F[0]])
+        Fy = np.array([self.top_F[1]])
+        Fz = np.array([self.top_F[2]])
+        Mxx = np.array([self.top_M[0]])
+        Myy = np.array([self.top_M[1]])
+        Mzz = np.array([self.top_M[2]])
+
+        load.changePointLoads(nF, Fx, Fy, Fz, Mxx, Myy, Mzz)
+
+
+        # aero/hydro loads
+        Px, Py, Pz = self.aerohydroLoadsAtNodes()
+
+        # switch to local c.s.
+        Px, Py, Pz = Pz, Py, -Px
+
+        # trapezoidally distributed loads
+        EL = np.arange(1, n)
+        xx1 = np.zeros(n-1)
+        xx2 = z[1:] - z[:-1] - 1e-6
+        wx1 = Px[:-1]
+        wx2 = Px[1:]
+        xy1 = np.zeros(n-1)
+        xy2 = z[1:] - z[:-1] - 1e-6
+        wy1 = Py[:-1]
+        wy2 = Py[1:]
+        xz1 = np.zeros(n-1)
+        xz2 = z[1:] - z[:-1] - 1e-6
+        wz1 = Pz[:-1]
+        wz2 = Pz[1:]
+
+        load.changeTrapezoidalLoads(EL, xx1, xx2, wx1, wx2, xy1, xy2, wy1, wy2, xz1, xz2, wz1, wz2)
+
+
+        tower.addLoadCase(load)
+
+        # -----------------------------------
+
+
+        # ------ dyamic analysis data ------------
+
+        nM = 3              # number of desired dynamic modes of vibration
+        Mmethod = 1         # 1: subspace Jacobi     2: Stodola
+        lump = 0            # 0: consistent mass ... 1: lumped mass matrix
+        tol = 1e-9          # mode shape tolerance
+        shift = 0.0         # shift value ... for unrestrained structures
+        exagg_modal = 1.0  # exaggerate modal mesh deformations
+
+        dynamic = frame3dd.DynamicAnalysis(nM, Mmethod, lump, tol, shift, exagg_modal)
+
+        # extra node inertia data
+        N = np.array([ntop])
+        EMs = np.array([self.top_m])
+        EMx = np.array([self.top_I[0]])
+        EMy = np.array([self.top_I[1]])
+        EMz = np.array([self.top_I[2]])
+
+        dynamic.changeExtraInertia(N, EMs, EMx, EMy, EMz)
+
+        # extra frame element mass data
+        # dynamic.changeExtraMass(EL, EMs)
+
+        # set dynamic analysis
+        tower.useDynamicAnalysis(dynamic)
+
+        # ------------------------------------
+
+
+        # run the analysis
+        displacements, forces, reactions, internalForces, mass, modal = tower.run()
+        iCase = 0
+
+        # mass
+        self.mass = mass.struct_mass
+
+        # natural frequncies
+        self.f1 = modal.freq[0]
+        self.f2 = modal.freq[1]
+
+        # deflections due to loading from tower top and wind/wave loads
+        self.top_deflection = displacements.dx[iCase, n-1]  # in yaw-aligned direction
+
+
+        # shear and bending (convert from local to global c.s.)
+        Fz = forces.Nx[iCase, :]
+        # Vy = forces.Vy[iCase, :]
+        Vx = -forces.Vz[iCase, :]
+        # Tzz = forces.Txx[iCase, :]
+        Myy = forces.Myy[iCase, :]
+        # Mxx = -forces.Mzz[iCase, :][1::2]
+
+
+        # one per element (first negative b.c. need reaction) remove last one b.c. its fictitous
+        Fz = np.concatenate([[-Fz[0]], Fz[1:-1:2]])
+        Vx = np.concatenate([[-Vx[0]], Vx[1:-1:2]])
+        Myy = np.concatenate([[-Myy[0]], Myy[1:-1:2]])
+
+
+        # axial and shear stress (all stress evaluated on +x yaw side)
+        A = math.pi * self.d * self.t
+        Iyy = math.pi/8.0 * self.d**3 * self.t
+        axial_stress = Fz/A - Myy/Iyy*self.d/2.0
+        shear_stress = 2 * Vx / A
+
+        # hoop_stress (Eurocode method)
+        hoop_stress = self.hoopStressEurocode()
+
+        # von mises stress
+        self.stress = self.vonMisesStressMargin(axial_stress, hoop_stress, shear_stress)
+
+        # buckling
+        self.z_buckling, self.buckling = self.shellBucklingEurocode(axial_stress, hoop_stress, shear_stress)
+
+        # fatigue
+        self.damage = self.fatigue()
+
+
 
 
 
@@ -469,14 +753,14 @@ class Tower(Assembly):
         self.create_passthrough('geometry.n')
         self.create_passthrough('geometry.n_reinforced')
 
-        self.create_passthrough('rna.blade_mass')
-        self.create_passthrough('rna.hub_mass')
-        self.create_passthrough('rna.nac_mass')
         self.create_passthrough('rna.nBlades')
-        self.create_passthrough('rna.hub_cm')
-        self.create_passthrough('rna.nac_cm')
+        self.create_passthrough('rna.blade_mass')
         self.create_passthrough('rna.blade_I')
+        self.create_passthrough('rna.hub_mass')
+        self.create_passthrough('rna.hub_cm')
         self.create_passthrough('rna.hub_I')
+        self.create_passthrough('rna.nac_mass')
+        self.create_passthrough('rna.nac_cm')
         self.create_passthrough('rna.nac_I')
 
 
@@ -492,6 +776,8 @@ class Tower(Assembly):
         self.create_passthrough('tower.gamma_m')
         self.create_passthrough('tower.gamma_n')
         self.create_passthrough('tower.life')
+        self.create_passthrough('tower.z_DEL')
+        self.create_passthrough('tower.M_DEL')
 
 
         self.create_passthrough('tower.mass')
@@ -505,50 +791,101 @@ class Tower(Assembly):
 
 
 
-# if __name__ == '__main__':
+if __name__ == '__main__':
 
-#     from commonse.environment import PowerWind, TowerSoil
-
-#     tower = Tower()
-
-#     # geometry
-#     towerHt = 87.6
-#     tower.z = towerHt*np.array([0.0, 0.5, 1.0])
-#     tower.d = [6.0, 4.935, 3.87]
-#     tower.t = [0.027*1.3, 0.023*1.3, 0.019*1.3]
-#     tower.n = [10, 10]
-#     tower.L_reinforced = towerHt/3.0
-#     tower.yaw = 0.0
-
-#     # top mass
-#     tower.top_m = 359082.653015
-#     tower.top_I = [2960437.0, 3253223.0, 3264220.0, 0.0, -18400.0, 0.0]
-#     tower.top_cm = [-1.9, 0.0, 1.75]
-#     tower.top_F = [1478579.28056464, 0., -3522600.82607833]
-#     tower.top_M = [10318177.27285694, 0., 0.]
-
-#     # wind
-#     wind = PowerWind()
-#     wind.Uref = 20.9
-#     wind.zref = towerHt
-#     wind.z0 = 0.0
-#     wind.shearExp = 0.2
-#     tower.replace('wind', wind)
-
-#     # soil
-#     soil = TowerSoil()
-#     soil.rigid = 6*[True]
-#     tower.replace('soil', soil)
-
-#     tower.run()
+# mass = 349486.79362
+# f1 = 0.331531844442
+# f2 = 0.334804545504
+# f1 = 0.896151401523  # no top mass
+# f2 = 0.896151401531
+# top_deflection = 0.717842009951
+# stress = [-0.57025437 -0.57071299 -0.57190392 -0.5739287  -0.5769025  -0.58095692
+#  -0.5862422  -0.59292993 -0.60121621 -0.61132526 -0.62351375 -0.63807553
+#  -0.65534699 -0.67571265 -0.69961022 -0.72753288 -0.76002246 -0.79763238
+#  -0.8407783  -0.88903907 -0.93620526]
+# z_buckling = [  0.   29.2  58.4]
+# buckling = [-0.53537088 -0.57748296 -0.73160984]
+# damage = [ 0.25643524  0.2473591   0.23628353  0.22239239  0.20746037  0.19081596
+#   0.17398252  0.15775199  0.14202496  0.12645153  0.10980775  0.09283941
+#   0.07611107  0.06010802  0.04563495  0.03308762  0.02282333  0.01566192
+#   0.01157356  0.0107948   0.01400229]
 
 
-#     print 'mass =', tower.mass
-#     print 'f1 =', tower.f1
-#     print 'f2 =', tower.f2
-#     print 'top_deflection =', tower.top_deflection
-#     print 'stress =', tower.stress
-#     print 'z_buckling =', tower.z_buckling
-#     print 'buckling =', tower.buckling
-#     print 'damage =', tower.damage
+    from commonse.environment import PowerWind, TowerSoil
+
+    tower = Tower()
+    tower.replace('wind', PowerWind())
+    tower.replace('soil', TowerSoil())
+    tower.replace('tower', TowerWithpBEAM())
+    # tower.replace('tower', TowerWithFrame3DD())
+
+    # geometry
+    towerHt = 87.6
+    tower.z = towerHt*np.array([0.0, 0.5, 1.0])
+    tower.d = [6.0, 4.935, 3.87]
+    tower.t = [0.027*1.3, 0.023*1.3, 0.019*1.3]
+    tower.n = [10, 10]
+    tower.n_reinforced = 3
+    tower.yaw = 0.0
+
+    # top mass
+    # tower.top_m = 359082.653015
+    # tower.top_I = [2960437.0, 3253223.0, 3264220.0, 0.0, -18400.0, 0.0]
+    # tower.top_cm = [-1.9, 0.0, 1.75]
+    # tower.top_F = [1478579.28056464, 0., -3522600.82607833]
+    # tower.top_M = [10318177.27285694, 0., 0.]
+
+    # blades (optimized)
+    nBlades = 3
+    tower.nBlades = nBlades
+    tower.blade_mass = 15241.323
+    bladeI = 8791992.000 * nBlades
+    tower.blade_I = np.array([bladeI, bladeI/2.0, bladeI/2.0, 0.0, 0.0, 0.0])
+
+    # hub (optimized)
+    tower.hub_mass = 50421.4
+    tower.hub_cm = np.array([-6.30, 0, 3.15])
+    tower.hub_I = np.array([127297.8, 127297.8, 127297.8, 0.0, 0.0, 0.0])
+
+    # nacelle (optimized)
+    tower.nac_mass = 221245.8
+    tower.nac_cm = np.array([-0.32, 0, 2.40])
+    tower.nac_I = np.array([9908302.58, 912488.28, 1160903.54, 0.0, 0.0, 0.0])
+
+    # max Thrust case
+    F1 = np.array([1.3295e6, -2.2694e4, -4.6184e6])
+    M1 = np.array([6.2829e6, -1.0477e6, 3.9029e6])
+    V1 = 16.030
+
+    tower.top_F = F1
+    tower.top_M = M1
+
+
+    # damage
+    tower.z_DEL = np.array([0.000, 1.327, 3.982, 6.636, 9.291, 11.945, 14.600, 17.255, 19.909, 22.564, 25.218, 27.873, 30.527, 33.182, 35.836, 38.491, 41.145, 43.800, 46.455, 49.109, 51.764, 54.418, 57.073, 59.727, 62.382, 65.036, 67.691, 70.345, 73.000, 75.655, 78.309, 80.964, 83.618, 86.273, 87.600])
+    tower.M_DEL = 1e3*np.array([8.2940E+003, 8.1518E+003, 7.8831E+003, 7.6099E+003, 7.3359E+003, 7.0577E+003, 6.7821E+003, 6.5119E+003, 6.2391E+003, 5.9707E+003, 5.7070E+003, 5.4500E+003, 5.2015E+003, 4.9588E+003, 4.7202E+003, 4.4884E+003, 4.2577E+003, 4.0246E+003, 3.7942E+003, 3.5664E+003, 3.3406E+003, 3.1184E+003, 2.8977E+003, 2.6811E+003, 2.4719E+003, 2.2663E+003, 2.0673E+003, 1.8769E+003, 1.7017E+003, 1.5479E+003, 1.4207E+003, 1.3304E+003, 1.2780E+003, 1.2673E+003, 1.2761E+003])
+
+
+    # wind
+    tower.wind.Uref = V1
+    tower.wind.zref = towerHt
+    tower.wind.z0 = 0.0
+    tower.wind.shearExp = 0.2
+
+
+    # soil
+    tower.soil.rigid = 6*[True]
+
+
+    tower.run()
+
+
+    print 'mass =', tower.mass
+    print 'f1 =', tower.f1
+    print 'f2 =', tower.f2
+    print 'top_deflection =', tower.top_deflection
+    print 'stress =', tower.stress
+    print 'z_buckling =', tower.z_buckling
+    print 'buckling =', tower.buckling
+    print 'damage =', tower.damage
 
