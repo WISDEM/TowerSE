@@ -469,15 +469,7 @@ class TowerWithFrame3DD(TowerStruc):
         z = self.z
         r = np.zeros(n)
 
-        # add top mass
-        ntop = n + 1
-        nodeT = np.arange(1, ntop+1)
-        xT = np.concatenate([x, [self.top_cm[0]]])
-        yT = np.concatenate([y, [self.top_cm[1]]])
-        zT = np.concatenate([z, [self.top_cm[2]]])
-        rT = np.concatenate([r, [0.0]])
-
-        nodes = frame3dd.NodeData(nodeT, xT, yT, zT, rT)
+        nodes = frame3dd.NodeData(node, x, y, z, r)
         # -----------------------------------
 
         # ------ reaction data ------------
@@ -514,21 +506,6 @@ class TowerWithFrame3DD(TowerStruc):
         G = self.G*np.ones(n-1)
         roll = np.zeros(n-1)
         density = self.rho*np.ones(n-1)
-
-        # add fake top element
-        element = np.arange(1, ntop)
-        N1 = np.arange(1, ntop)
-        N2 = np.arange(2, ntop+1)
-        Ax = np.concatenate([Ax, [1.0]])
-        Asy = np.concatenate([Asy, [1.0]])
-        Asz = np.concatenate([Asz, [1.0]])
-        Jx = np.concatenate([Jx, [1.0]])
-        Iy = np.concatenate([Iy, [1.0]])
-        Iz = np.concatenate([Iz, [1.0]])
-        E = np.concatenate([E, [1e15]])
-        G = np.concatenate([G, [1e15]])
-        roll = np.concatenate([roll, [0.0]])
-        density = np.concatenate([density, [1e-6]])
 
         elements = frame3dd.ElementData(element, N1, N2, Ax, Asy, Asz, Jx, Iy, Iz, E, G, roll, density)
 
@@ -613,13 +590,19 @@ class TowerWithFrame3DD(TowerStruc):
         dynamic = frame3dd.DynamicAnalysis(nM, Mmethod, lump, tol, shift, exagg_modal)
 
         # extra node inertia data
-        N = np.array([ntop])
+        N = np.array([n])
         EMs = np.array([self.top_m])
         EMx = np.array([self.top_I[0]])
         EMy = np.array([self.top_I[1]])
         EMz = np.array([self.top_I[2]])
+        EMxy = np.array([self.top_I[3]])
+        EMxz = np.array([self.top_I[4]])
+        EMyz = np.array([self.top_I[5]])
+        rhox = np.array([self.top_cm[0]])
+        rhoy = np.array([self.top_cm[1]])
+        rhoz = np.array([self.top_cm[2]])
 
-        dynamic.changeExtraInertia(N, EMs, EMx, EMy, EMz)
+        dynamic.changeExtraInertia(N, EMs, EMx, EMy, EMz, EMxy, EMxz, EMyz, rhox, rhoy, rhoz)
 
         # extra frame element mass data
         # dynamic.changeExtraMass(EL, EMs)
@@ -651,13 +634,13 @@ class TowerWithFrame3DD(TowerStruc):
         Vx = -forces.Vz[iCase, :]
         # Tzz = forces.Txx[iCase, :]
         Myy = forces.Myy[iCase, :]
-        # Mxx = -forces.Mzz[iCase, :][1::2]
+        # Mxx = -forces.Mzz[iCase, :]
 
 
-        # one per element (first negative b.c. need reaction) remove last one b.c. its fictitous
-        Fz = np.concatenate([[-Fz[0]], Fz[1:-1:2]])
-        Vx = np.concatenate([[-Vx[0]], Vx[1:-1:2]])
-        Myy = np.concatenate([[-Myy[0]], Myy[1:-1:2]])
+        # one per element (first negative b.c. need reaction)
+        Fz = np.concatenate([[-Fz[0]], Fz[1::2]])
+        Vx = np.concatenate([[-Vx[0]], Vx[1::2]])
+        Myy = np.concatenate([[-Myy[0]], Myy[1::2]])
 
 
         # axial and shear stress (all stress evaluated on +x yaw side)
@@ -816,8 +799,8 @@ if __name__ == '__main__':
     tower = Tower()
     tower.replace('wind', PowerWind())
     tower.replace('soil', TowerSoil())
-    tower.replace('tower', TowerWithpBEAM())
-    # tower.replace('tower', TowerWithFrame3DD())
+    # tower.replace('tower', TowerWithpBEAM())
+    tower.replace('tower', TowerWithFrame3DD())
 
     # geometry
     towerHt = 87.6
