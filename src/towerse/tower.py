@@ -476,14 +476,15 @@ class TowerWithFrame3DD(TowerStruc):
 
         # rigid base
         node = np.array([1])
-        Rx = np.ones(1)
-        Ry = np.ones(1)
-        Rz = np.ones(1)
-        Rxx = np.ones(1)
-        Ryy = np.ones(1)
-        Rzz = np.ones(1)
+        Kx = np.array(self.k_soil[0])
+        Ky = np.array(self.k_soil[2])
+        Kz = np.array(self.k_soil[4])
+        Ktx = np.array(self.k_soil[1])
+        Kty = np.array(self.k_soil[3])
+        Ktz = np.array(self.k_soil[5])
+        rigid = float('inf')
 
-        reactions = frame3dd.ReactionData(node, Rx, Ry, Rz, Rxx, Ryy, Rzz)
+        reactions = frame3dd.ReactionData(node, Kx, Ky, Kz, Ktx, Kty, Ktz, rigid)
         # -----------------------------------
 
 
@@ -514,12 +515,11 @@ class TowerWithFrame3DD(TowerStruc):
 
         # ------ other data ------------
 
-        shear = 1               # 1: include shear deformation
-        geom = 1                # 1: include geometric stiffness
-        exagg_static = 1.0     # exaggerate mesh deformations
+        shear = True               # 1: include shear deformation
+        geom = False                # 1: include geometric stiffness
         dx = 10.0               # x-axis increment for internal forces
 
-        other = frame3dd.OtherData(shear, geom, exagg_static, dx)
+        other = frame3dd.OtherData(shear, geom, dx)
 
         # -----------------------------------
 
@@ -585,9 +585,8 @@ class TowerWithFrame3DD(TowerStruc):
         lump = 0            # 0: consistent mass ... 1: lumped mass matrix
         tol = 1e-9          # mode shape tolerance
         shift = 0.0         # shift value ... for unrestrained structures
-        exagg_modal = 1.0  # exaggerate modal mesh deformations
 
-        dynamic = frame3dd.DynamicAnalysis(nM, Mmethod, lump, tol, shift, exagg_modal)
+        dynamic = frame3dd.DynamicAnalysis(nM, Mmethod, lump, tol, shift)
 
         # extra node inertia data
         N = np.array([n])
@@ -794,6 +793,54 @@ if __name__ == '__main__':
 #   0.01157356  0.0107948   0.01400229]
 
 
+# mass = 349476.002856
+# f1 = 0.322800488871
+# f2 = 0.325922807548
+# top_deflection = 0.757871302419
+# stress = [-0.55622646 -0.55601492 -0.55659614 -0.55808006 -0.56059121 -0.56427171
+#  -0.5692836  -0.57581161 -0.58406652 -0.59428891 -0.6067536  -0.62177453
+#  -0.63971029 -0.66096972 -0.68601712 -0.71537452 -0.74961494 -0.78932537
+#  -0.83495651 -0.88610756 -0.93620526]
+# z_buckling = [  0.   29.2  58.4]
+# buckling = [-0.50862287 -0.54637665 -0.71034327]
+# damage = [ 0.25643524  0.2473591   0.23628353  0.22239239  0.20746037  0.19081596
+#   0.17398252  0.15775199  0.14202496  0.12645153  0.10980775  0.09283941
+#   0.07611107  0.06010802  0.04563495  0.03308762  0.02282333  0.01566192
+#   0.01157356  0.0107948   0.01400229]
+
+
+
+# mass = 349486.79362
+# f1 = 0.0940750366356
+# f2 = 0.0943811151565
+# top_deflection = 8.79165834703
+# stress = [-0.57025437 -0.57071299 -0.57190392 -0.5739287  -0.5769025  -0.58095692
+#  -0.5862422  -0.59292993 -0.60121621 -0.61132526 -0.62351375 -0.63807553
+#  -0.65534699 -0.67571265 -0.69961022 -0.72753288 -0.76002246 -0.79763238
+#  -0.8407783  -0.88903907 -0.93620526]
+# z_buckling = [  0.   29.2  58.4]
+# buckling = [-0.53537088 -0.57748296 -0.73160984]
+# damage = [ 0.25643524  0.2473591   0.23628353  0.22239239  0.20746037  0.19081596
+#   0.17398252  0.15775199  0.14202496  0.12645153  0.10980775  0.09283941
+#   0.07611107  0.06010802  0.04563495  0.03308762  0.02282333  0.01566192
+#   0.01157356  0.0107948   0.01400229]
+
+
+# mass = 349486.79362
+# f1 = 0.0842120275499
+# f2 = 0.084468763839
+# top_deflection = 10.9662681741
+# stress = [-0.57025437 -0.57071299 -0.57190392 -0.5739287  -0.5769025  -0.58095692
+#  -0.5862422  -0.59292993 -0.60121621 -0.61132526 -0.62351375 -0.63807553
+#  -0.65534699 -0.67571265 -0.69961022 -0.72753288 -0.76002246 -0.79763238
+#  -0.8407783  -0.88903907 -0.93620526]
+# z_buckling = [  0.   29.2  58.4]
+# buckling = [-0.53537088 -0.57748296 -0.73160984]
+# damage = [ 0.25643524  0.2473591   0.23628353  0.22239239  0.20746037  0.19081596
+#   0.17398252  0.15775199  0.14202496  0.12645153  0.10980775  0.09283941
+#   0.07611107  0.06010802  0.04563495  0.03308762  0.02282333  0.01566192
+#   0.01157356  0.0107948   0.01400229]
+
     from commonse.environment import PowerWind, TowerSoil
 
     tower = Tower()
@@ -858,6 +905,9 @@ if __name__ == '__main__':
 
     # soil
     tower.soil.rigid = 6*[True]
+
+    # tower.soil.rigid = 6*[False]
+
 
 
     tower.run()
