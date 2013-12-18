@@ -632,7 +632,11 @@ class TowerBase(Component):
 
 class TowerWithpBEAM(TowerBase):
 
-    import _pBEAM
+
+    def __init__(self):
+        import _pBEAM  # import only if instantiated so that Frame3DD is not required for all users
+        self._pBEAM = _pBEAM
+        super(TowerWithpBEAM, self).__init__()
 
 
     def execute(self):
@@ -700,7 +704,12 @@ class TowerWithpBEAM(TowerBase):
 
 class TowerWithFrame3DD(TowerBase):
 
-    import frame3dd
+
+    def __init__(self):
+        import frame3dd  # import only if instantiated so that Frame3DD is not required for all users
+        self.frame3dd = frame3dd
+        super(TowerWithFrame3DD, self).__init__()
+
 
     def execute(self):
 
@@ -1023,82 +1032,82 @@ class Tower(Assembly):
 
 if __name__ == '__main__':
 
-    # start = 4.2
-    # stop = 6.8
-    # num = 8
+    # # start = 4.2
+    # # stop = 6.8
+    # # num = 8
 
-    # y, dy_dstart, dy_dstop = linspace_with_deriv(start, stop, num)
+    # # y, dy_dstart, dy_dstop = linspace_with_deriv(start, stop, num)
 
 
-    # yp, blah, blah = linspace_with_deriv(start+1e-6, stop, num)
-    # fd1 = (yp - y)/1e-6
+    # # yp, blah, blah = linspace_with_deriv(start+1e-6, stop, num)
+    # # fd1 = (yp - y)/1e-6
 
-    # yp, blah, blah = linspace_with_deriv(start, stop+1e-6, num)
-    # fd2 = (yp - y)/1e-6
+    # # yp, blah, blah = linspace_with_deriv(start, stop+1e-6, num)
+    # # fd2 = (yp - y)/1e-6
 
-    # print dy_dstart
-    # print fd1
-    # print dy_dstart - fd1
+    # # print dy_dstart
+    # # print fd1
+    # # print dy_dstart - fd1
 
-    # print dy_dstop
-    # print fd2
-    # print dy_dstop - fd2
+    # # print dy_dstop
+    # # print fd2
+    # # print dy_dstop - fd2
+
+    # # exit()
+
+    # from commonse.environment import check_gradient
+
+    # # # twd = TowerWindDrag()
+    # # twd = TowerWaveDrag()
+    # # twd.U = [0., 8.80496275, 10.11424623, 10.96861453, 11.61821801, 12.14846828, 12.59962946, 12.99412772, 13.34582791, 13.66394248, 13.95492553, 14.22348635, 14.47317364, 14.70673252, 14.92633314, 15.13372281, 15.33033057, 15.51734112, 15.69574825, 15.86639432, 16.03]
+    # # twd.z = [0., 4.38, 8.76, 13.14, 17.52, 21.9, 26.28, 30.66, 35.04, 39.42, 43.8, 48.18, 52.56, 56.94, 61.32, 65.7, 70.08, 74.46, 78.84, 83.22, 87.6]
+    # # twd.d = [6., 5.8935, 5.787, 5.6805, 5.574, 5.4675, 5.361, 5.2545, 5.148, 5.0415, 4.935, 4.8285, 4.722, 4.6155, 4.509, 4.4025, 4.296, 4.1895, 4.083, 3.9765, 3.87]
+    # # twd.beta = [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]
+    # # twd.rho = 1.225
+    # # twd.mu = 1.7934e-05
+
+    # # twd.A = 1.1*twd.U
+    # # twd.cm = 2.0
+
+    # # check_gradient(twd)
+
+    # # td = TowerDiscretization()
+    # # td.z = np.array([0.0, 43.8, 87.6])
+    # # td.d = np.array([6.0, 4.935, 3.87])
+    # # td.t = np.array([0.0351, 0.0299, 0.0247])
+    # # td.n = np.array([10, 7])
+    # # td.n_reinforced = 3
+
+    # # check_gradient(td)
+
+    # rna = RNAMass()
+    # rna.blade_mass = 15241.323
+    # rna.hub_mass = 50421.4
+    # rna.nac_mass = 221245.8
+    # rna.hub_cm = [-6.3, 0.,  3.15]
+    # rna.nac_cm = [-0.32, 0.,   2.4 ]
+    # rna.blade_I = [ 26375976., 13187988., 13187988., 0., 0., 0.]
+    # rna.hub_I = [ 127297.8, 127297.8, 127297.8, 0., 0., 0. ]
+    # rna.nac_I = [ 9908302.58, 912488.28, 1160903.54, 0., 0., 0.  ]
+    # rna.nBlades = 3
+
+    # # rna.run()
+
+    # # r1 = rna.rna_I_TT[0]
+
+    # # rna.hub_cm[1] -= 1e-6
+    # # rna.run()
+    # # r2 = rna.rna_I_TT[0]
+    # # print r1
+    # # print r2
+    # # print r2 - r1
+    # # print (r2 - r1)/1e-6
+
+    # # exit()
+
+    # check_gradient(rna)
 
     # exit()
-
-    from commonse.environment import check_gradient
-
-    # # twd = TowerWindDrag()
-    # twd = TowerWaveDrag()
-    # twd.U = [0., 8.80496275, 10.11424623, 10.96861453, 11.61821801, 12.14846828, 12.59962946, 12.99412772, 13.34582791, 13.66394248, 13.95492553, 14.22348635, 14.47317364, 14.70673252, 14.92633314, 15.13372281, 15.33033057, 15.51734112, 15.69574825, 15.86639432, 16.03]
-    # twd.z = [0., 4.38, 8.76, 13.14, 17.52, 21.9, 26.28, 30.66, 35.04, 39.42, 43.8, 48.18, 52.56, 56.94, 61.32, 65.7, 70.08, 74.46, 78.84, 83.22, 87.6]
-    # twd.d = [6., 5.8935, 5.787, 5.6805, 5.574, 5.4675, 5.361, 5.2545, 5.148, 5.0415, 4.935, 4.8285, 4.722, 4.6155, 4.509, 4.4025, 4.296, 4.1895, 4.083, 3.9765, 3.87]
-    # twd.beta = [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]
-    # twd.rho = 1.225
-    # twd.mu = 1.7934e-05
-
-    # twd.A = 1.1*twd.U
-    # twd.cm = 2.0
-
-    # check_gradient(twd)
-
-    # td = TowerDiscretization()
-    # td.z = np.array([0.0, 43.8, 87.6])
-    # td.d = np.array([6.0, 4.935, 3.87])
-    # td.t = np.array([0.0351, 0.0299, 0.0247])
-    # td.n = np.array([10, 7])
-    # td.n_reinforced = 3
-
-    # check_gradient(td)
-
-    rna = RNAMass()
-    rna.blade_mass = 15241.323
-    rna.hub_mass = 50421.4
-    rna.nac_mass = 221245.8
-    rna.hub_cm = [-6.3, 0.,  3.15]
-    rna.nac_cm = [-0.32, 0.,   2.4 ]
-    rna.blade_I = [ 26375976., 13187988., 13187988., 0., 0., 0.]
-    rna.hub_I = [ 127297.8, 127297.8, 127297.8, 0., 0., 0. ]
-    rna.nac_I = [ 9908302.58, 912488.28, 1160903.54, 0., 0., 0.  ]
-    rna.nBlades = 3
-
-    # rna.run()
-
-    # r1 = rna.rna_I_TT[0]
-
-    # rna.hub_cm[1] -= 1e-6
-    # rna.run()
-    # r2 = rna.rna_I_TT[0]
-    # print r1
-    # print r2
-    # print r2 - r1
-    # print (r2 - r1)/1e-6
-
-    # exit()
-
-    check_gradient(rna)
-
-    exit()
 
 
     from commonse.environment import PowerWind, TowerSoil
