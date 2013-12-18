@@ -10,12 +10,21 @@ Copyright (c) NREL. All rights reserved.
 import math
 import numpy as np
 from openmdao.main.api import VariableTree, Component, Assembly
-from openmdao.main.datatypes.api import Int, Float, Array, VarTree
+from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot
 
-from commonse import _akima, sind, cosd, Vector
-from commonse.environment import Wind, Wave, Soil
+from commonse import sind, cosd, DirectionVector
+from commonse.environment import WindBase, WaveBase, SoilBase
 from towerSupplement import shellBuckling, fatigue
+from akima import Akima
 
+
+# "Experiments on the Flow Past a Circular Cylinder at Very High Reynolds Numbers", Roshko
+Re_pt = [0.00001, 0.0001, 0.0010, 0.0100, 0.0200, 0.1220, 0.2000, 0.3000, 0.4000,
+         0.5000, 1.0000, 1.5000, 2.0000, 2.5000, 3.0000, 3.5000, 4.0000, 5.0000, 10.0000]
+cd_pt = [4.0000,  2.0000, 1.1100, 1.1100, 1.2000, 1.2000, 1.1700, 0.9000, 0.5400,
+         0.3100, 0.3800, 0.4600, 0.5300, 0.5700, 0.6100, 0.6400, 0.6700, 0.7000, 0.7000]
+
+drag_spline = Akima(np.log10(Re_pt), cd_pt)
 
 
 # -----------------
@@ -37,19 +46,14 @@ def cylinderDrag(Re):
 
     """
 
-    Re /= 1.0e6
+    ReN = Re / 1.0e6
 
-    # "Experiments on the Flow Past a Circular Cylinder at Very High Reynolds Numbers", Roshko
-    Re_pt = [0.00001, 0.0001, 0.0010, 0.0100, 0.0200, 0.1220, 0.2000, 0.3000, 0.4000,
-             0.5000, 1.0000, 1.5000, 2.0000, 2.5000, 3.0000, 3.5000, 4.0000, 5.0000, 10.0000]
-    cd_pt = [4.0000,  2.0000, 1.1100, 1.1100, 1.2000, 1.2000, 1.1700, 0.9000, 0.5400,
-             0.3100, 0.3800, 0.4600, 0.5300, 0.5700, 0.6100, 0.6400, 0.6700, 0.7000, 0.7000]
-
-    # interpolate
     cd = np.zeros_like(Re)
-    cd[Re != 0] = _akima.interpolate(np.log10(Re_pt), cd_pt, np.log10(Re[Re != 0]))
+    dcd_dRe = np.zeros_like(Re)
+    cd[ReN != 0], dcd_dRe[ReN != 0] = drag_spline.interp(np.log10(ReN[ReN != 0]), derivatives=True)
+    dcd_dRe[Re != 0] /= (Re[Re != 0]*math.log(10))  # chain rule
 
-    return cd
+    return cd, dcd_dRe
 
 
 
@@ -61,7 +65,9 @@ def cylinderDrag(Re):
 class AeroLoads(VariableTree):
     """wind/wave loads"""
 
-    P = VarTree(Vector(), units='N/m', desc='distributed loads')
+    Px = Array(units='N/m', desc='distributed loads')
+    Py = Array(units='N/m', desc='distributed loads')
+    Pz = Array(units='N/m', desc='distributed loads')
     q = Array(units='N/m**2', desc='dynamic pressure')
     z = Array(units='m', desc='corresponding heights')
     beta = Array(units='deg', desc='wind/wave angle relative to inertia c.s.')
@@ -75,13 +81,15 @@ class AeroLoads(VariableTree):
 class TowerWindDrag(Component):
     """drag forces on a cylindrical tower due to wind"""
 
-    # in
-    rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
-    mu = Float(1.7934e-5, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of air')
+    # variables
     U = Array(iotype='in', units='m/s', desc='magnitude of wind speed')
     z = Array(iotype='in', units='m', desc='heights where wind speed was computed')
     d = Array(iotype='in', units='m', desc='corresponding diameter of cylinder section')
+
+    # parameters
     beta = Array(iotype='in', units='deg', desc='corresponding wind angles relative to inertial coordinate system')
+    rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
+    mu = Float(1.7934e-5, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of air')
 
     # out
     windLoads = VarTree(AeroLoads(), iotype='out', desc='wind loads in inertial coordinate system')
@@ -89,41 +97,82 @@ class TowerWindDrag(Component):
 
     def execute(self):
 
+        rho = self.rho
+        U = self.U
+        d = self.d
+        mu = self.mu
+        beta = self.beta
+
         # dynamic pressure
-        q = 0.5*self.rho*self.U**2
+        q = 0.5*rho*U**2
 
         # Reynolds number and drag
-        Re = self.rho*self.U*self.d/self.mu
-        cd = cylinderDrag(Re)
-        Fp = q*cd*self.d
+        Re = rho*U*d/mu
+        cd, dcd_dRe = cylinderDrag(Re)
+        Fp = q*cd*d
 
         # components of distributed loads
-        Px = Fp*cosd(self.beta)
-        Py = Fp*sind(self.beta)
+        Px = Fp*cosd(beta)
+        Py = Fp*sind(beta)
         Pz = 0*Fp
 
         # pack data
-        self.windLoads.P.x = Px
-        self.windLoads.P.y = Py
-        self.windLoads.P.z = Pz
+        self.windLoads.Px = Px
+        self.windLoads.Py = Py
+        self.windLoads.Pz = Pz
         self.windLoads.q = q
         self.windLoads.z = self.z
-        self.windLoads.beta = self.beta
+        self.windLoads.beta = beta
+
+        # derivatives
+        self.dq_dU = rho*U
+        const = (self.dq_dU*cd + q*dcd_dRe*rho*d/mu)*d
+        self.dPx_dU = const*cosd(beta)
+        self.dPy_dU = const*sind(beta)
+
+        const = (cd + dcd_dRe*Re)*q
+        self.dPx_dd = const*cosd(beta)
+        self.dPy_dd = const*sind(beta)
+
+
+    def linearize(self):
+
+        n = len(self.z)
+
+        zeron = np.zeros((n, n))
+
+        dPx = np.hstack([np.diag(self.dPx_dU), zeron, np.diag(self.dPx_dd)])
+        dPy = np.hstack([np.diag(self.dPy_dU), zeron, np.diag(self.dPy_dd)])
+        dPz = np.zeros((n, 3*n))
+        dq = np.hstack([np.diag(self.dq_dU), np.zeros((n, 2*n))])
+        dz = np.hstack([zeron, np.eye(n), zeron])
+
+        self.J = np.vstack([dPx, dPy, dPz, dq, dz])
+
+
+    def provideJ(self):
+
+        inputs = ('U', 'z', 'd')
+        outputs = ('windLoads.Px', 'windLoads.Py', 'windLoads.Pz', 'windLoads.q', 'windLoads.z')
+
+        return inputs, outputs, self.J
 
 
 
 class TowerWaveDrag(Component):
     """drag forces on a cylindrical tower due to waves"""
 
-    # in
-    rho = Float(1027.0, iotype='in', units='kg/m**3', desc='water density')
-    mu = Float(1.3351e-3, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of water')
-    cm = Float(2.0, iotype='in', desc='mass coefficient')
+    # variables
     U = Array(iotype='in', units='m/s', desc='magnitude of wave speed')
     A = Array(iotype='in', units='m/s**2', desc='magnitude of wave acceleration')
     z = Array(iotype='in', units='m', desc='heights where wave speed was computed')
     d = Array(iotype='in', units='m', desc='corresponding diameter of cylinder section')
+
+    # parameters
     beta = Array(iotype='in', units='deg', desc='corresponding wave angles relative to inertial coordinate system')
+    rho = Float(1027.0, iotype='in', units='kg/m**3', desc='water density')
+    mu = Float(1.3351e-3, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of water')
+    cm = Float(2.0, iotype='in', desc='mass coefficient')
 
     # out
     waveLoads = VarTree(AeroLoads(), iotype='out', desc='wave loads in inertial coordinate system')
@@ -131,31 +180,125 @@ class TowerWaveDrag(Component):
 
     def execute(self):
 
+        rho = self.rho
+        U = self.U
+        d = self.d
+        mu = self.mu
+        beta = self.beta
+
         # dynamic pressure
-        q = 0.5*self.rho*self.U**2
+        q = 0.5*rho*U**2
 
         # Reynolds number and drag
-        Re = self.rho*self.U*self.d/self.mu
-        cd = cylinderDrag(Re)
+        Re = rho*U*d/mu
+        cd, dcd_dRe = cylinderDrag(Re)
 
         # inertial and drag forces
-        Fi = self.rho*self.cm*math.pi/4.0*self.d**2*self.A  # Morrison's equation
-        Fd = q*cd*self.d
+        Fi = rho*self.cm*math.pi/4.0*d**2*self.A  # Morrison's equation
+        Fd = q*cd*d
         Fp = Fi + Fd
 
         # components of distributed loads
-        Px = Fp*cosd(self.beta)
-        Py = Fp*sind(self.beta)
+        Px = Fp*cosd(beta)
+        Py = Fp*sind(beta)
         Pz = 0*Fp
 
         # pack data
-        self.waveLoads.P.x = Px
-        self.waveLoads.P.y = Py
-        self.waveLoads.P.z = Pz
+        self.waveLoads.Px = Px
+        self.waveLoads.Py = Py
+        self.waveLoads.Pz = Pz
         self.waveLoads.q = q
         self.waveLoads.z = self.z
-        self.waveLoads.beta = self.beta
+        self.waveLoads.beta = beta
 
+        # derivatives
+        self.dq_dU = rho*U
+        const = (self.dq_dU*cd + q*dcd_dRe*rho*d/mu)*d
+        self.dPx_dU = const*cosd(beta)
+        self.dPy_dU = const*sind(beta)
+
+        const = (cd + dcd_dRe*Re)*q + rho*self.cm*math.pi/4.0*2*d*self.A
+        self.dPx_dd = const*cosd(beta)
+        self.dPy_dd = const*sind(beta)
+
+        const = rho*self.cm*math.pi/4.0*d**2
+        self.dPx_dA = const*cosd(beta)
+        self.dPy_dA = const*sind(beta)
+
+
+    def linearize(self):
+
+        n = len(self.z)
+
+        zeron = np.zeros((n, n))
+
+        dPx = np.hstack([np.diag(self.dPx_dU), np.diag(self.dPx_dA), zeron, np.diag(self.dPx_dd)])
+        dPy = np.hstack([np.diag(self.dPy_dU), np.diag(self.dPy_dA), zeron, np.diag(self.dPy_dd)])
+        dPz = np.zeros((n, 4*n))
+        dq = np.hstack([np.diag(self.dq_dU), np.zeros((n, 3*n))])
+        dz = np.hstack([zeron, zeron, np.eye(n), zeron])
+
+        self.J = np.vstack([dPx, dPy, dPz, dq, dz])
+
+
+    def provideJ(self):
+
+        inputs = ('U', 'A', 'z', 'd')
+        outputs = ('waveLoads.Px', 'waveLoads.Py', 'waveLoads.Pz', 'waveLoads.q', 'waveLoads.z')
+
+        return inputs, outputs, self.J
+
+
+def linspace_with_deriv(start, stop, num):
+
+    step = (stop-start)/float((num-1))
+    y = np.arange(0, num) * step + start
+    y[-1] = stop
+
+    # gradients
+    const = np.arange(0, num) * 1.0/float((num-1))
+    dy_dstart = -const + 1.0
+    dy_dstart[-1] = 0.0
+
+    dy_dstop = const
+    dy_dstop[-1] = 1.0
+
+    return y, dy_dstart, dy_dstop
+
+
+def interp_with_deriv(x, xp, yp):
+
+    n = len(x)
+    m = len(xp)
+
+    y = np.zeros(n)
+    dydx = np.zeros(n)
+    dydxp = np.zeros((n, m))
+    dydyp = np.zeros((n, m))
+
+    for i in range(n):
+        if x[i] < xp[0]:
+            # linearly extrapolate
+            pass
+        elif x[i] > xp[-1]:
+            pass
+        else:
+            for j in range(m-1):
+                if xp[j+1] > x[i]:
+                    break
+            x1 = xp[j]
+            y1 = yp[j]
+            x2 = xp[j+1]
+            y2 = yp[j+1]
+
+            y[i] = y1 + (y2 - y1)*(x[i] - x1)/(x2 - x1)
+            dydx[i] = (y2 - y1)/(x2 - x1)
+            dydxp[i, j] = (y2 - y1)*(x[i] - x2)/(x2 - x1)**2
+            dydxp[i, j+1] = -(y2 - y1)*(x[i] - x1)/(x2 - x1)**2
+            dydyp[i, j] = 1 - (x[i] - x1)/(x2 - x1)
+            dydyp[i, j+1] = (x[i] - x1)/(x2 - x1)
+
+    return y, np.diag(dydx), dydxp, dydyp
 
 
 class TowerDiscretization(Component):
@@ -176,28 +319,72 @@ class TowerDiscretization(Component):
 
     def execute(self):
 
-        # compute nodal locations
+        n1 = sum(self.n) + 1
+        n2 = len(self.z)
+        self.dznode_dz = np.zeros((n1, n2))
+
+        # compute nodal locations (and gradients)
         self.z_node = np.array([self.z[0]])
+
+        nlast = 0
         for i in range(len(self.n)):
-            znode = np.linspace(self.z[i], self.z[i+1], self.n[i]+1)
+            znode, dznode_dzi, dznode_dzip = linspace_with_deriv(self.z[i], self.z[i+1], self.n[i]+1)
             self.z_node = np.r_[self.z_node, znode[1:]]
 
-        # interpolate
+            # gradients
+            self.dznode_dz[nlast:nlast+self.n[i]+1, i] = dznode_dzi
+            self.dznode_dz[nlast:nlast+self.n[i]+1, i+1] = dznode_dzip
+            nlast += self.n[i]
+
+
+        # interpolate (and gradients)
         self.d_node = np.interp(self.z_node, self.z, self.d)
         self.t_node = np.interp(self.z_node, self.z, self.t)
 
-        # reinforcement distances
-        self.z_reinforced = np.linspace(self.z[0], self.z[-1], self.n_reinforced+1)
+        self.d_node, ddnode_dznode, ddnode_dz, self.ddnode_dd = interp_with_deriv(self.z_node, self.z, self.d)
+        self.t_node, dtnode_dznode, dtnode_dz, self.dtnode_dt = interp_with_deriv(self.z_node, self.z, self.t)
 
+        # chain rule
+        self.ddnode_dz = ddnode_dz + np.dot(ddnode_dznode, self.dznode_dz)
+        self.dtnode_dz = dtnode_dz + np.dot(dtnode_dznode, self.dznode_dz)
+
+
+        # reinforcement distances
+        self.z_reinforced, dzr_dz0, dzr_dzend = linspace_with_deriv(self.z[0], self.z[-1], self.n_reinforced+1)
+        self.dzr_dz = np.zeros((len(self.z_reinforced), n2))
+        self.dzr_dz[:, 0] = dzr_dz0
+        self.dzr_dz[:, -1] = dzr_dzend
+
+
+
+    def linearize(self):
+
+        n = len(self.z_node)
+        m = len(self.z)
+        n2 = len(self.z_reinforced)
+
+        dzn = np.hstack([self.dznode_dz, np.zeros((n, 2*m))])
+        ddn = np.hstack([self.ddnode_dz, self.ddnode_dd, np.zeros((n, m))])
+        dtn = np.hstack([self.dtnode_dz, np.zeros((n, m)), self.dtnode_dt])
+        dzr = np.hstack([self.dzr_dz, np.zeros((n2, 2*m))])
+
+        self.J = np.vstack([dzn, ddn, dtn, dzr])
+
+
+    def provideJ(self):
+
+        inputs = ('z', 'd', 't')
+        outputs = ('z_node', 'd_node', 't_node', 'z_reinforced')
+
+        return inputs, outputs, self.J
 
 
 class RNAMass(Component):
 
-    # in
+    # variables
     blade_mass = Float(iotype='in', units='kg', desc='mass of one blade')
     hub_mass = Float(iotype='in', units='kg', desc='mass of hub')
     nac_mass = Float(iotype='in', units='kg', desc='mass of nacelle')
-    nBlades = Int(iotype='in', desc='number of blades')
 
     hub_cm = Array(iotype='in', units='m', desc='location of hub center of mass relative to tower top in yaw-aligned c.s.')
     nac_cm = Array(iotype='in', units='m', desc='location of nacelle center of mass relative to tower top in yaw-aligned c.s.')
@@ -207,7 +394,10 @@ class RNAMass(Component):
     hub_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of hub about its center of mass')
     nac_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of nacelle about its center of mass')
 
-    # out
+    # parameters
+    nBlades = Int(iotype='in', desc='number of blades')
+
+    # outputs
     rna_mass = Float(iotype='out', units='kg', desc='total mass of RNA')
     rna_cm = Array(iotype='out', units='m', desc='location of RNA center of mass relative to tower top in yaw-aligned c.s.')
     rna_I_TT = Array(iotype='out', units='kg*m**2', desc='mass moments of inertia of RNA about tower top in yaw-aligned coordinate system')
@@ -223,14 +413,14 @@ class RNAMass(Component):
 
     def execute(self):
 
-        rotor_mass = self.blade_mass*self.nBlades + self.hub_mass
-        nac_mass = self.nac_mass
+        self.rotor_mass = self.blade_mass*self.nBlades + self.hub_mass
+        self.nac_mass = self.nac_mass
 
         # rna mass
-        self.rna_mass = rotor_mass + nac_mass
+        self.rna_mass = self.rotor_mass + self.nac_mass
 
         # rna cm
-        self.rna_cm = (rotor_mass*self.hub_cm + nac_mass*self.nac_cm)/self.rna_mass
+        self.rna_cm = (self.rotor_mass*self.hub_cm + self.nac_mass*self.nac_cm)/self.rna_mass
 
         # rna I
         blade_I = self._assembleI(*self.blade_I)
@@ -239,16 +429,71 @@ class RNAMass(Component):
         rotor_I = blade_I + hub_I
 
         R = self.hub_cm
-        rotor_I_TT = rotor_I + rotor_mass*(np.dot(R, R)*np.eye(3) - np.outer(R, R))
+        rotor_I_TT = rotor_I + self.rotor_mass*(np.dot(R, R)*np.eye(3) - np.outer(R, R))
 
         R = self.nac_cm
-        nac_I_TT = nac_I + nac_mass*(np.dot(R, R)*np.eye(3) - np.outer(R, R))
+        nac_I_TT = nac_I + self.nac_mass*(np.dot(R, R)*np.eye(3) - np.outer(R, R))
 
         self.rna_I_TT = self._unassembleI(rotor_I_TT + nac_I_TT)
 
 
+    def linearize(self):
 
-class TowerStruc(Component):
+        # mass
+        dmass = np.hstack([np.array([self.nBlades, 1.0, 1.0]), np.zeros(2*3+3*6)])
+
+        # cm
+        top = (self.rotor_mass*self.hub_cm + self.nac_mass*self.nac_cm)
+        dcm_dblademass = (self.rna_mass*self.nBlades*self.hub_cm - top*self.nBlades)/self.rna_mass**2
+        dcm_dhubmass = (self.rna_mass*self.hub_cm - top)/self.rna_mass**2
+        dcm_dnacmass = (self.rna_mass*self.nac_cm - top)/self.rna_mass**2
+        dcm_dhubcm = self.rotor_mass/self.rna_mass*np.eye(3)
+        dcm_dnaccm = self.nac_mass/self.rna_mass*np.eye(3)
+
+        dcm = np.hstack([dcm_dblademass[:, np.newaxis], dcm_dhubmass[:, np.newaxis],
+            dcm_dnacmass[:, np.newaxis], dcm_dhubcm, dcm_dnaccm, np.zeros((3, 3*6))])
+
+        # I
+        R = self.hub_cm
+        const = self._unassembleI(np.dot(R, R)*np.eye(3) - np.outer(R, R))
+        const = const[:, np.newaxis]
+        dI_dblademass = self.nBlades*const
+        dI_dhubmass = const
+        dI_drx = self.rotor_mass*self._unassembleI(2*R[0]*np.eye(3) - np.array([[2*R[0], R[1], R[2]], [R[1], 0.0, 0.0], [R[2], 0.0, 0.0]]))
+        dI_dry = self.rotor_mass*self._unassembleI(2*R[1]*np.eye(3) - np.array([[0.0, R[0], 0.0], [R[0], 2*R[1], R[2]], [0.0, R[2], 0.0]]))
+        dI_drz = self.rotor_mass*self._unassembleI(2*R[2]*np.eye(3) - np.array([[0.0, 0.0, R[0]], [0.0, 0.0, R[1]], [R[0], R[1], 2*R[2]]]))
+        dI_dhubcm = np.vstack([dI_drx, dI_dry, dI_drz]).T
+
+        R = self.nac_cm
+        const = self._unassembleI(np.dot(R, R)*np.eye(3) - np.outer(R, R))
+        const = const[:, np.newaxis]
+        dI_dnacmass = const
+        dI_drx = self.nac_mass*self._unassembleI(2*R[0]*np.eye(3) - np.array([[2*R[0], R[1], R[2]], [R[1], 0.0, 0.0], [R[2], 0.0, 0.0]]))
+        dI_dry = self.nac_mass*self._unassembleI(2*R[1]*np.eye(3) - np.array([[0.0, R[0], 0.0], [R[0], 2*R[1], R[2]], [0.0, R[2], 0.0]]))
+        dI_drz = self.nac_mass*self._unassembleI(2*R[2]*np.eye(3) - np.array([[0.0, 0.0, R[0]], [0.0, 0.0, R[1]], [R[0], R[1], 2*R[2]]]))
+        dI_dnaccm = np.vstack([dI_drx, dI_dry, dI_drz]).T
+
+        dI_dbladeI = np.eye(6)
+        dI_dhubI = np.eye(6)
+        dI_dnacI = np.eye(6)
+
+        dI = np.hstack([dI_dblademass, dI_dhubmass, dI_dnacmass, dI_dhubcm, dI_dnaccm,
+            dI_dbladeI, dI_dhubI, dI_dnacI])
+
+        self.J = np.vstack([dmass, dcm, dI])
+
+
+
+    def provideJ(self):
+
+        inputs = ('blade_mass', 'hub_mass', 'nac_mass', 'hub_cm', 'nac_cm', 'blade_I', 'hub_I', 'nac_I')
+        outputs = ('rna_mass', 'rna_cm', 'rna_I_TT')
+
+        return inputs, outputs, self.J
+
+
+
+class TowerBase(Component):
     """structural analysis of cylindrical tower
 
     all forces, moments, distances should be given (and returned) in the yaw-aligned coordinate system
@@ -287,7 +532,7 @@ class TowerStruc(Component):
     gamma_m = Float(1.1, iotype='in', desc='safety factor on materials')
     gamma_n = Float(1.0, iotype='in', desc='safety factor on consequence of failure')
 
-    life = Int(20, iotype='in', desc='fatigue life of tower')
+    life = Float(20.0, iotype='in', desc='fatigue life of tower')
     m_SN = Int(4, iotype='in', desc='slope of S/N curve')
     DC = Float(80.0, iotype='in', desc='standard value of stress')
     gamma_fatigue = Float(1.485, iotype='in', desc='total safety factor for fatigue')
@@ -313,8 +558,8 @@ class TowerStruc(Component):
         wave = self.waveLoads
         hubHt = self.z[-1]  # top of tower
         betaMain = np.interp(hubHt, self.z, wind.beta)  # wind coordinate system defined relative to hub height
-        windLoads = wind.P.toDirVec().inertialToWind(betaMain).windToYaw(self.yaw)
-        waveLoads = wave.P.toDirVec().inertialToWind(betaMain).windToYaw(self.yaw)
+        windLoads = DirectionVector(wind.Px, wind.Py, wind.Pz).inertialToWind(betaMain).windToYaw(self.yaw)
+        waveLoads = DirectionVector(wave.Px, wave.Py, wave.Pz).inertialToWind(betaMain).windToYaw(self.yaw)
 
         Px = np.interp(self.z, wind.z, windLoads.x) + np.interp(self.z, wave.z, waveLoads.x)
         Py = np.interp(self.z, wind.z, windLoads.y) + np.interp(self.z, wave.z, waveLoads.y)
@@ -385,7 +630,7 @@ class TowerStruc(Component):
 
 
 
-class TowerWithpBEAM(TowerStruc):
+class TowerWithpBEAM(TowerBase):
 
     import _pBEAM
 
@@ -453,7 +698,7 @@ class TowerWithpBEAM(TowerStruc):
 
 
 
-class TowerWithFrame3DD(TowerStruc):
+class TowerWithFrame3DD(TowerBase):
 
     import frame3dd
 
@@ -513,18 +758,48 @@ class TowerWithFrame3DD(TowerStruc):
         # -----------------------------------
 
 
-        # ------ other data ------------
+        # ------ options ------------
 
-        shear = True               # 1: include shear deformation
-        geom = False                # 1: include geometric stiffness
-        dx = 10.0               # x-axis increment for internal forces
-
-        other = frame3dd.OtherData(shear, geom, dx)
+        shear = True        # 1: include shear deformation
+        geom = False        # 1: include geometric stiffness
+        dx = 10.0           # x-axis increment for internal forces
+        options = frame3dd.Options(shear, geom, dx)
 
         # -----------------------------------
 
         # initialize frame3dd object
-        tower = frame3dd.Frame(nodes, reactions, elements, other)
+        tower = frame3dd.Frame(nodes, reactions, elements, options)
+
+
+        # ------ add extra mass ------------
+
+        # extra node inertia data
+        N = np.array([n])
+        EMs = np.array([self.top_m])
+        EMx = np.array([self.top_I[0]])
+        EMy = np.array([self.top_I[1]])
+        EMz = np.array([self.top_I[2]])
+        EMxy = np.array([self.top_I[3]])
+        EMxz = np.array([self.top_I[4]])
+        EMyz = np.array([self.top_I[5]])
+        rhox = np.array([self.top_cm[0]])
+        rhoy = np.array([self.top_cm[1]])
+        rhoz = np.array([self.top_cm[2]])
+        addGravityLoad = False
+
+        tower.changeExtraNodeMass(N, EMs, EMx, EMy, EMz, EMxy, EMxz, EMyz, rhox, rhoy, rhoz, addGravityLoad)
+        # ------------------------------------
+
+        # ------- enable dynamic analysis ----------
+
+        nM = 2              # number of desired dynamic modes of vibration (below only necessary if nM > 0)
+        Mmethod = 1         # 1: subspace Jacobi     2: Stodola
+        lump = 0            # 0: consistent mass ... 1: lumped mass matrix
+        tol = 1e-9          # mode shape tolerance
+        shift = 0.0         # shift value ... for unrestrained structures
+        tower.enableDynamics(nM, Mmethod, lump, tol, shift)
+
+        # ----------------------------
 
 
         # ------ static load case 1 ------------
@@ -536,7 +811,7 @@ class TowerWithFrame3DD(TowerStruc):
 
         load = frame3dd.StaticLoadCase(gx, gy, gz)
 
-        # tower top load
+        # tower top load  (TODO: remove RNA weight from these forces since Frame3DD accounts for it)
 
         nF = np.array([n])
         Fx = np.array([self.top_F[0]])
@@ -577,39 +852,6 @@ class TowerWithFrame3DD(TowerStruc):
 
         # -----------------------------------
 
-
-        # ------ dyamic analysis data ------------
-
-        nM = 3              # number of desired dynamic modes of vibration
-        Mmethod = 1         # 1: subspace Jacobi     2: Stodola
-        lump = 0            # 0: consistent mass ... 1: lumped mass matrix
-        tol = 1e-9          # mode shape tolerance
-        shift = 0.0         # shift value ... for unrestrained structures
-
-        dynamic = frame3dd.DynamicAnalysis(nM, Mmethod, lump, tol, shift)
-
-        # extra node inertia data
-        N = np.array([n])
-        EMs = np.array([self.top_m])
-        EMx = np.array([self.top_I[0]])
-        EMy = np.array([self.top_I[1]])
-        EMz = np.array([self.top_I[2]])
-        EMxy = np.array([self.top_I[3]])
-        EMxz = np.array([self.top_I[4]])
-        EMyz = np.array([self.top_I[5]])
-        rhox = np.array([self.top_cm[0]])
-        rhoy = np.array([self.top_cm[1]])
-        rhoz = np.array([self.top_cm[2]])
-
-        dynamic.changeExtraInertia(N, EMs, EMx, EMy, EMz, EMxy, EMxz, EMyz, rhox, rhoy, rhoz)
-
-        # extra frame element mass data
-        # dynamic.changeExtraMass(EL, EMs)
-
-        # set dynamic analysis
-        tower.useDynamicAnalysis(dynamic)
-
-        # ------------------------------------
 
 
         # run the analysis
@@ -678,16 +920,21 @@ class Tower(Assembly):
     wave_mu = Float(1.3351e-3, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of water')
     wave_cm = Float(2.0, iotype='in', desc='mass coefficient')
 
+    wind = Slot(WindBase)
+    wave = Slot(WaveBase)
+    soil = Slot(SoilBase)
+    tower = Slot(TowerBase)
+
     def configure(self):
 
         self.add('geometry', TowerDiscretization())
-        self.add('wind', Wind())
-        self.add('wave', Wave())
+        self.add('wind', WindBase())
+        self.add('wave', WaveBase())
         self.add('windLoads', TowerWindDrag())
         self.add('waveLoads', TowerWaveDrag())
-        self.add('soil', Soil())
+        self.add('soil', SoilBase())
         self.add('rna', RNAMass())
-        self.add('tower', TowerStruc())
+        self.add('tower', TowerBase())
 
         self.driver.workflow.add(['geometry', 'wind', 'wave', 'windLoads', 'waveLoads', 'soil', 'rna', 'tower'])
 
@@ -758,6 +1005,7 @@ class Tower(Assembly):
         self.create_passthrough('tower.gamma_m')
         self.create_passthrough('tower.gamma_n')
         self.create_passthrough('tower.life')
+        self.create_passthrough('tower.gamma_fatigue')
         self.create_passthrough('tower.z_DEL')
         self.create_passthrough('tower.M_DEL')
 
@@ -775,79 +1023,91 @@ class Tower(Assembly):
 
 if __name__ == '__main__':
 
-# mass = 349486.79362
-# f1 = 0.331531844442
-# f2 = 0.334804545504
-# f1 = 0.896151401523  # no top mass
-# f2 = 0.896151401531
-# top_deflection = 0.717842009951
-# stress = [-0.57025437 -0.57071299 -0.57190392 -0.5739287  -0.5769025  -0.58095692
-#  -0.5862422  -0.59292993 -0.60121621 -0.61132526 -0.62351375 -0.63807553
-#  -0.65534699 -0.67571265 -0.69961022 -0.72753288 -0.76002246 -0.79763238
-#  -0.8407783  -0.88903907 -0.93620526]
-# z_buckling = [  0.   29.2  58.4]
-# buckling = [-0.53537088 -0.57748296 -0.73160984]
-# damage = [ 0.25643524  0.2473591   0.23628353  0.22239239  0.20746037  0.19081596
-#   0.17398252  0.15775199  0.14202496  0.12645153  0.10980775  0.09283941
-#   0.07611107  0.06010802  0.04563495  0.03308762  0.02282333  0.01566192
-#   0.01157356  0.0107948   0.01400229]
+    # start = 4.2
+    # stop = 6.8
+    # num = 8
+
+    # y, dy_dstart, dy_dstop = linspace_with_deriv(start, stop, num)
 
 
-# mass = 349476.002856
-# f1 = 0.322800488871
-# f2 = 0.325922807548
-# top_deflection = 0.757871302419
-# stress = [-0.55622646 -0.55601492 -0.55659614 -0.55808006 -0.56059121 -0.56427171
-#  -0.5692836  -0.57581161 -0.58406652 -0.59428891 -0.6067536  -0.62177453
-#  -0.63971029 -0.66096972 -0.68601712 -0.71537452 -0.74961494 -0.78932537
-#  -0.83495651 -0.88610756 -0.93620526]
-# z_buckling = [  0.   29.2  58.4]
-# buckling = [-0.50862287 -0.54637665 -0.71034327]
-# damage = [ 0.25643524  0.2473591   0.23628353  0.22239239  0.20746037  0.19081596
-#   0.17398252  0.15775199  0.14202496  0.12645153  0.10980775  0.09283941
-#   0.07611107  0.06010802  0.04563495  0.03308762  0.02282333  0.01566192
-#   0.01157356  0.0107948   0.01400229]
+    # yp, blah, blah = linspace_with_deriv(start+1e-6, stop, num)
+    # fd1 = (yp - y)/1e-6
 
+    # yp, blah, blah = linspace_with_deriv(start, stop+1e-6, num)
+    # fd2 = (yp - y)/1e-6
 
+    # print dy_dstart
+    # print fd1
+    # print dy_dstart - fd1
 
-# mass = 349486.79362
-# f1 = 0.0940750366356
-# f2 = 0.0943811151565
-# top_deflection = 8.79165834703
-# stress = [-0.57025437 -0.57071299 -0.57190392 -0.5739287  -0.5769025  -0.58095692
-#  -0.5862422  -0.59292993 -0.60121621 -0.61132526 -0.62351375 -0.63807553
-#  -0.65534699 -0.67571265 -0.69961022 -0.72753288 -0.76002246 -0.79763238
-#  -0.8407783  -0.88903907 -0.93620526]
-# z_buckling = [  0.   29.2  58.4]
-# buckling = [-0.53537088 -0.57748296 -0.73160984]
-# damage = [ 0.25643524  0.2473591   0.23628353  0.22239239  0.20746037  0.19081596
-#   0.17398252  0.15775199  0.14202496  0.12645153  0.10980775  0.09283941
-#   0.07611107  0.06010802  0.04563495  0.03308762  0.02282333  0.01566192
-#   0.01157356  0.0107948   0.01400229]
+    # print dy_dstop
+    # print fd2
+    # print dy_dstop - fd2
 
+    # exit()
 
-# mass = 349486.79362
-# f1 = 0.0842120275499
-# f2 = 0.084468763839
-# top_deflection = 10.9662681741
-# stress = [-0.57025437 -0.57071299 -0.57190392 -0.5739287  -0.5769025  -0.58095692
-#  -0.5862422  -0.59292993 -0.60121621 -0.61132526 -0.62351375 -0.63807553
-#  -0.65534699 -0.67571265 -0.69961022 -0.72753288 -0.76002246 -0.79763238
-#  -0.8407783  -0.88903907 -0.93620526]
-# z_buckling = [  0.   29.2  58.4]
-# buckling = [-0.53537088 -0.57748296 -0.73160984]
-# damage = [ 0.25643524  0.2473591   0.23628353  0.22239239  0.20746037  0.19081596
-#   0.17398252  0.15775199  0.14202496  0.12645153  0.10980775  0.09283941
-#   0.07611107  0.06010802  0.04563495  0.03308762  0.02282333  0.01566192
-#   0.01157356  0.0107948   0.01400229]
+    from commonse.environment import check_gradient
+
+    # # twd = TowerWindDrag()
+    # twd = TowerWaveDrag()
+    # twd.U = [0., 8.80496275, 10.11424623, 10.96861453, 11.61821801, 12.14846828, 12.59962946, 12.99412772, 13.34582791, 13.66394248, 13.95492553, 14.22348635, 14.47317364, 14.70673252, 14.92633314, 15.13372281, 15.33033057, 15.51734112, 15.69574825, 15.86639432, 16.03]
+    # twd.z = [0., 4.38, 8.76, 13.14, 17.52, 21.9, 26.28, 30.66, 35.04, 39.42, 43.8, 48.18, 52.56, 56.94, 61.32, 65.7, 70.08, 74.46, 78.84, 83.22, 87.6]
+    # twd.d = [6., 5.8935, 5.787, 5.6805, 5.574, 5.4675, 5.361, 5.2545, 5.148, 5.0415, 4.935, 4.8285, 4.722, 4.6155, 4.509, 4.4025, 4.296, 4.1895, 4.083, 3.9765, 3.87]
+    # twd.beta = [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]
+    # twd.rho = 1.225
+    # twd.mu = 1.7934e-05
+
+    # twd.A = 1.1*twd.U
+    # twd.cm = 2.0
+
+    # check_gradient(twd)
+
+    # td = TowerDiscretization()
+    # td.z = np.array([0.0, 43.8, 87.6])
+    # td.d = np.array([6.0, 4.935, 3.87])
+    # td.t = np.array([0.0351, 0.0299, 0.0247])
+    # td.n = np.array([10, 7])
+    # td.n_reinforced = 3
+
+    # check_gradient(td)
+
+    rna = RNAMass()
+    rna.blade_mass = 15241.323
+    rna.hub_mass = 50421.4
+    rna.nac_mass = 221245.8
+    rna.hub_cm = [-6.3, 0.,  3.15]
+    rna.nac_cm = [-0.32, 0.,   2.4 ]
+    rna.blade_I = [ 26375976., 13187988., 13187988., 0., 0., 0.]
+    rna.hub_I = [ 127297.8, 127297.8, 127297.8, 0., 0., 0. ]
+    rna.nac_I = [ 9908302.58, 912488.28, 1160903.54, 0., 0., 0.  ]
+    rna.nBlades = 3
+
+    # rna.run()
+
+    # r1 = rna.rna_I_TT[0]
+
+    # rna.hub_cm[1] -= 1e-6
+    # rna.run()
+    # r2 = rna.rna_I_TT[0]
+    # print r1
+    # print r2
+    # print r2 - r1
+    # print (r2 - r1)/1e-6
+
+    # exit()
+
+    check_gradient(rna)
+
+    exit()
+
 
     from commonse.environment import PowerWind, TowerSoil
 
     tower = Tower()
     tower.replace('wind', PowerWind())
     tower.replace('soil', TowerSoil())
-    # tower.replace('tower', TowerWithpBEAM())
-    tower.replace('tower', TowerWithFrame3DD())
+    tower.replace('tower', TowerWithpBEAM())
+    # tower.replace('tower', TowerWithFrame3DD())
 
     # geometry
     towerHt = 87.6
