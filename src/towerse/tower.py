@@ -50,8 +50,9 @@ def cylinderDrag(Re):
 
     cd = np.zeros_like(Re)
     dcd_dRe = np.zeros_like(Re)
-    cd[ReN != 0], dcd_dRe[ReN != 0] = drag_spline.interp(np.log10(ReN[ReN != 0]), derivatives=True)
-    dcd_dRe[Re != 0] /= (Re[Re != 0]*math.log(10))  # chain rule
+    idx = ReN > 0
+    cd[idx], dcd_dRe[idx] = drag_spline.interp(np.log10(ReN[idx]), derivatives=True)
+    dcd_dRe[idx] /= (Re[idx]*math.log(10))  # chain rule
 
     return cd, dcd_dRe
 
@@ -81,6 +82,7 @@ class AeroLoads(VariableTree):
 class TowerWindDrag(Component):
     """drag forces on a cylindrical tower due to wind"""
 
+    # TODO: add required=True back into these Arrays. openmdao bug.  Also in wave
     # variables
     U = Array(iotype='in', units='m/s', desc='magnitude of wind speed')
     z = Array(iotype='in', units='m', desc='heights where wind speed was computed')
