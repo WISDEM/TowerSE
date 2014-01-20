@@ -12,7 +12,8 @@ import numpy as np
 from openmdao.main.api import VariableTree, Component, Assembly
 from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot
 
-from commonse import sind, cosd, DirectionVector
+from commonse.utilities import sind, cosd, linspace_with_deriv, interp_with_deriv
+from commonse.csystem import DirectionVector
 from commonse.environment import WindBase, WaveBase, SoilBase
 from towerSupplement import shellBuckling, fatigue
 from akima import Akima
@@ -24,7 +25,7 @@ Re_pt = [0.00001, 0.0001, 0.0010, 0.0100, 0.0200, 0.1220, 0.2000, 0.3000, 0.4000
 cd_pt = [4.0000,  2.0000, 1.1100, 1.1100, 1.2000, 1.2000, 1.1700, 0.9000, 0.5400,
          0.3100, 0.3800, 0.4600, 0.5300, 0.5700, 0.6100, 0.6400, 0.6700, 0.7000, 0.7000]
 
-drag_spline = Akima(np.log10(Re_pt), cd_pt)
+drag_spline = Akima(np.log10(Re_pt), cd_pt, delta_x=0.0)
 
 
 # -----------------
@@ -51,7 +52,7 @@ def cylinderDrag(Re):
     cd = np.zeros_like(Re)
     dcd_dRe = np.zeros_like(Re)
     idx = ReN > 0
-    cd[idx], dcd_dRe[idx] = drag_spline.interp(np.log10(ReN[idx]), derivatives=True)
+    cd[idx], dcd_dRe[idx] = drag_spline.interp(np.log10(ReN[idx]))
     dcd_dRe[idx] /= (Re[idx]*math.log(10))  # chain rule
 
     return cd, dcd_dRe
@@ -251,56 +252,7 @@ class TowerWaveDrag(Component):
         return inputs, outputs, self.J
 
 
-def linspace_with_deriv(start, stop, num):
 
-    step = (stop-start)/float((num-1))
-    y = np.arange(0, num) * step + start
-    y[-1] = stop
-
-    # gradients
-    const = np.arange(0, num) * 1.0/float((num-1))
-    dy_dstart = -const + 1.0
-    dy_dstart[-1] = 0.0
-
-    dy_dstop = const
-    dy_dstop[-1] = 1.0
-
-    return y, dy_dstart, dy_dstop
-
-
-def interp_with_deriv(x, xp, yp):
-
-    n = len(x)
-    m = len(xp)
-
-    y = np.zeros(n)
-    dydx = np.zeros(n)
-    dydxp = np.zeros((n, m))
-    dydyp = np.zeros((n, m))
-
-    for i in range(n):
-        if x[i] < xp[0]:
-            # linearly extrapolate
-            pass
-        elif x[i] > xp[-1]:
-            pass
-        else:
-            for j in range(m-1):
-                if xp[j+1] > x[i]:
-                    break
-            x1 = xp[j]
-            y1 = yp[j]
-            x2 = xp[j+1]
-            y2 = yp[j+1]
-
-            y[i] = y1 + (y2 - y1)*(x[i] - x1)/(x2 - x1)
-            dydx[i] = (y2 - y1)/(x2 - x1)
-            dydxp[i, j] = (y2 - y1)*(x[i] - x2)/(x2 - x1)**2
-            dydxp[i, j+1] = -(y2 - y1)*(x[i] - x1)/(x2 - x1)**2
-            dydyp[i, j] = 1 - (x[i] - x1)/(x2 - x1)
-            dydyp[i, j+1] = (x[i] - x1)/(x2 - x1)
-
-    return y, np.diag(dydx), dydxp, dydyp
 
 
 class TowerDiscretization(Component):
@@ -384,20 +336,20 @@ class TowerDiscretization(Component):
 class RNAMass(Component):
 
     # variables
-    blade_mass = Float(iotype='in', units='kg', desc='mass of one blade')
+    blades_mass = Float(iotype='in', units='kg', desc='mass of all blade')
     hub_mass = Float(iotype='in', units='kg', desc='mass of hub')
     nac_mass = Float(iotype='in', units='kg', desc='mass of nacelle')
 
     hub_cm = Array(iotype='in', units='m', desc='location of hub center of mass relative to tower top in yaw-aligned c.s.')
     nac_cm = Array(iotype='in', units='m', desc='location of nacelle center of mass relative to tower top in yaw-aligned c.s.')
 
+    # TODO: check on this???
     # order for all moments of inertia is (xx, yy, zz, xy, xz, yz) in the yaw-aligned coorinate system
-    blade_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of all blades about hub center')
+    blades_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of all blades about hub center')
     hub_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of hub about its center of mass')
     nac_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of nacelle about its center of mass')
 
-    # parameters
-    nBlades = Int(iotype='in', desc='number of blades')
+    # TODO: fix gradients
 
     # outputs
     rna_mass = Float(iotype='out', units='kg', desc='total mass of RNA')
@@ -415,7 +367,7 @@ class RNAMass(Component):
 
     def execute(self):
 
-        self.rotor_mass = self.blade_mass*self.nBlades + self.hub_mass
+        self.rotor_mass = self.blades_mass + self.hub_mass
         self.nac_mass = self.nac_mass
 
         # rna mass
@@ -425,10 +377,10 @@ class RNAMass(Component):
         self.rna_cm = (self.rotor_mass*self.hub_cm + self.nac_mass*self.nac_cm)/self.rna_mass
 
         # rna I
-        blade_I = self._assembleI(*self.blade_I)
+        blades_I = self._assembleI(*self.blades_I)
         hub_I = self._assembleI(*self.hub_I)
         nac_I = self._assembleI(*self.nac_I)
-        rotor_I = blade_I + hub_I
+        rotor_I = blades_I + hub_I
 
         R = self.hub_cm
         rotor_I_TT = rotor_I + self.rotor_mass*(np.dot(R, R)*np.eye(3) - np.outer(R, R))
@@ -495,6 +447,32 @@ class RNAMass(Component):
 
 
 
+class RotorLoads(Component):
+
+    T = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
+    Q = Float(iotype='in', desc='torque in hub-aligned coordinate system')
+    r_hub = Array(iotype='in', desc='position of rotor hub relative to tower top in yaw-aligned c.s.')
+    tilt = Float(iotype='in', units='deg')
+
+    top_F = Array(iotype='out')  # in yaw-aligned
+    top_M = Array(iotype='out')
+
+    def execute(self):
+
+        F = DirectionVector(self.T, 0.0, 0.0).hubToYaw(self.tilt)
+        M = DirectionVector(self.Q, 0.0, 0.0).hubToYaw(self.tilt)
+
+        r = DirectionVector(self.r_hub[0], self.r_hub[1], self.r_hub[2])
+        M = M - r.cross(F)
+
+        self.top_F = np.array([F.x, F.y, F.z])
+        self.top_M = np.array([M.x, M.y, M.z])
+
+        print 'check RotorLoads'
+
+
+
+
 class TowerBase(Component):
     """structural analysis of cylindrical tower
 
@@ -511,7 +489,7 @@ class TowerBase(Component):
     # wind/wave loads
     windLoads = VarTree(AeroLoads(), iotype='in')
     waveLoads = VarTree(AeroLoads(), iotype='in')
-    g = Float(9.81, iotype='in', units='m/s')
+    g = Float(9.81, iotype='in', units='m/s**2')
 
     # top mass
     top_F = Array(iotype='in')
@@ -922,8 +900,18 @@ class TowerWithFrame3DD(TowerBase):
 # -----------------
 
 
-class Tower(Assembly):
+class TowerSE(Assembly):
 
+    # geometry
+    z = Array(iotype='in', units='m', desc='locations along tower, linear lofting between')
+    d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
+    t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
+    n = Array(iotype='in', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
+    n_reinforced = Int(iotype='in', desc='must be a minimum of 1 (top and bottom)')
+    yaw = Float(0.0, iotype='in', units='deg')
+    tilt = Float(0.0, iotype='in', units='deg')
+
+    # environment
     wind_rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
     wind_mu = Float(1.7934e-5, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of air')
 
@@ -931,10 +919,58 @@ class Tower(Assembly):
     wave_mu = Float(1.3351e-3, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of water')
     wave_cm = Float(2.0, iotype='in', desc='mass coefficient')
 
+    g = Float(9.81, iotype='in', units='m/s**2')
+
+    # rotor loads
+    rotorT = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
+    rotorQ = Float(iotype='in', desc='torque in hub-aligned coordinate system')
+
+    # RNA mass properties
+    blades_mass = Float(iotype='in', units='kg', desc='mass of all blade')
+    hub_mass = Float(iotype='in', units='kg', desc='mass of hub')
+    nac_mass = Float(iotype='in', units='kg', desc='mass of nacelle')
+
+    hub_cm = Array(iotype='in', units='m', desc='location of hub center of mass relative to tower top in yaw-aligned c.s.')
+    nac_cm = Array(iotype='in', units='m', desc='location of nacelle center of mass relative to tower top in yaw-aligned c.s.')
+
+    blades_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of all blades about hub center')
+    hub_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of hub about its center of mass')
+    nac_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of nacelle about its center of mass')
+
+    # material properties
+    E = Float(210e9, iotype='in', units='N/m**2', desc='material modulus of elasticity')
+    G = Float(80.8e9, iotype='in', units='N/m**2', desc='material shear modulus')
+    rho = Float(8500.0, iotype='in', units='kg/m**3', desc='material density')
+    sigma_y = Float(450.0e6, iotype='in', units='N/m**2', desc='yield stress')
+
+    # safety factors
+    gamma_f = Float(1.35, iotype='in', desc='safety factor on loads')
+    gamma_m = Float(1.1, iotype='in', desc='safety factor on materials')
+    gamma_n = Float(1.0, iotype='in', desc='safety factor on consequence of failure')
+
+    # fatigue parameters
+    life = Float(20.0, iotype='in', desc='fatigue life of tower')
+    m_SN = Int(4, iotype='in', desc='slope of S/N curve')
+    DC = Float(80.0, iotype='in', desc='standard value of stress')
+    gamma_fatigue = Float(1.485, iotype='in', desc='total safety factor for fatigue')
+    z_DEL = Array(iotype='in')
+    M_DEL = Array(iotype='in')
+
+    # replace
     wind = Slot(WindBase)
     wave = Slot(WaveBase)
     soil = Slot(SoilBase)
     tower = Slot(TowerBase)
+
+    # outputs
+    mass = Float(iotype='out')
+    f1 = Float(iotype='out', units='Hz', desc='first natural frequency')
+    f2 = Float(iotype='out', units='Hz', desc='second natural frequency')
+    top_deflection = Float(iotype='out', units='m', desc='deflection of tower top in yaw-aligned +x direction')
+    stress = Array(iotype='out', units='N/m**2', desc='von Mises stress along tower on downwind side (yaw-aligned +x).  normalized by yield stress.  includes safety factors.')
+    z_buckling = Array(iotype='out', units='m', desc='z-locations along tower where shell buckling is evaluted')
+    buckling = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
+    damage = Array(iotype='out', desc='fatigue damage at each tower section')
 
     def configure(self):
 
@@ -945,17 +981,26 @@ class Tower(Assembly):
         self.add('waveLoads', TowerWaveDrag())
         self.add('soil', SoilBase())
         self.add('rna', RNAMass())
+        self.add('rotorloads', RotorLoads())
         self.add('tower', TowerBase())
 
-        self.driver.workflow.add(['geometry', 'wind', 'wave', 'windLoads', 'waveLoads', 'soil', 'rna', 'tower'])
+        self.driver.workflow.add(['geometry', 'wind', 'wave', 'windLoads', 'waveLoads', 'soil', 'rna', 'rotorloads', 'tower'])
 
-        # wind
+        # connections to geometry
+        self.connect('z', 'geometry.z')
+        self.connect('d', 'geometry.d')
+        self.connect('t', 'geometry.t')
+        self.connect('n', 'geometry.n')
+        self.connect('n_reinforced', 'geometry.n_reinforced')
+
+
+        # connections to wind
         self.connect('geometry.z_node', 'wind.z')
 
-        # wave
+        # connections to wave
         self.connect('geometry.z_node', 'wave.z')
 
-        # wind loads
+        # connections to wind loads
         self.connect('wind.U', 'windLoads.U')
         self.connect('wind.beta', 'windLoads.beta')
         self.connect('wind_rho', 'windLoads.rho')
@@ -963,7 +1008,7 @@ class Tower(Assembly):
         self.connect('geometry.z_node', 'windLoads.z')
         self.connect('geometry.d_node', 'windLoads.d')
 
-        # wave loads
+        # connections to wave loads
         self.connect('wave.U', 'waveLoads.U')
         self.connect('wave.A', 'waveLoads.A')
         self.connect('wave.beta', 'waveLoads.beta')
@@ -973,8 +1018,24 @@ class Tower(Assembly):
         self.connect('geometry.z_node', 'waveLoads.z')
         self.connect('geometry.d_node', 'waveLoads.d')
 
+        # connections to rna
+        self.connect('blades_mass', 'rna.blades_mass')
+        self.connect('blades_I', 'rna.blades_I')
+        self.connect('hub_mass', 'rna.hub_mass')
+        self.connect('hub_cm', 'rna.hub_cm')
+        self.connect('hub_I', 'rna.hub_I')
+        self.connect('nac_mass', 'rna.nac_mass')
+        self.connect('nac_cm', 'rna.nac_cm')
+        self.connect('nac_I', 'rna.nac_I')
 
-        # tower
+        # connections to rotorloads
+        self.connect('rotorT', 'rotorloads.T')
+        self.connect('rotorQ', 'rotorloads.Q')
+        self.connect('hub_cm', 'rotorloads.r_hub')
+        self.connect('tilt', 'rotorloads.tilt')
+
+
+        # connections to tower
         self.connect('geometry.z_node', 'tower.z')
         self.connect('geometry.d_node', 'tower.d')
         self.connect('geometry.t_node', 'tower.t')
@@ -985,50 +1046,34 @@ class Tower(Assembly):
         self.connect('rna.rna_mass', 'tower.top_m')
         self.connect('rna.rna_cm', 'tower.top_cm')
         self.connect('rna.rna_I_TT', 'tower.top_I')
-
-        # passthroughs
-        self.create_passthrough('geometry.z')
-        self.create_passthrough('geometry.d')
-        self.create_passthrough('geometry.t')
-        self.create_passthrough('geometry.n')
-        self.create_passthrough('geometry.n_reinforced')
-
-        self.create_passthrough('rna.nBlades')
-        self.create_passthrough('rna.blade_mass')
-        self.create_passthrough('rna.blade_I')
-        self.create_passthrough('rna.hub_mass')
-        self.create_passthrough('rna.hub_cm')
-        self.create_passthrough('rna.hub_I')
-        self.create_passthrough('rna.nac_mass')
-        self.create_passthrough('rna.nac_cm')
-        self.create_passthrough('rna.nac_I')
-
-
-        self.create_passthrough('tower.yaw')
-        self.create_passthrough('tower.g')
-        self.create_passthrough('tower.top_F')
-        self.create_passthrough('tower.top_M')
-        self.create_passthrough('tower.E')
-        self.create_passthrough('tower.G')
-        self.create_passthrough('tower.rho')
-        self.create_passthrough('tower.sigma_y')
-        self.create_passthrough('tower.gamma_f')
-        self.create_passthrough('tower.gamma_m')
-        self.create_passthrough('tower.gamma_n')
-        self.create_passthrough('tower.life')
-        self.create_passthrough('tower.gamma_fatigue')
-        self.create_passthrough('tower.z_DEL')
-        self.create_passthrough('tower.M_DEL')
+        self.connect('rotorloads.top_F', 'tower.top_F')
+        self.connect('rotorloads.top_M', 'tower.top_M')
+        self.connect('yaw', 'tower.yaw')
+        self.connect('g', 'tower.g')
+        self.connect('E', 'tower.E')
+        self.connect('G', 'tower.G')
+        self.connect('rho', 'tower.rho')
+        self.connect('sigma_y', 'tower.sigma_y')
+        self.connect('gamma_f', 'tower.gamma_f')
+        self.connect('gamma_m', 'tower.gamma_m')
+        self.connect('gamma_n', 'tower.gamma_n')
+        self.connect('life', 'tower.life')
+        self.connect('m_SN', 'tower.m_SN')
+        self.connect('DC', 'tower.DC')
+        self.connect('gamma_fatigue', 'tower.gamma_fatigue')
+        self.connect('z_DEL', 'tower.z_DEL')
+        self.connect('M_DEL', 'tower.M_DEL')
 
 
-        self.create_passthrough('tower.mass')
-        self.create_passthrough('tower.f1')
-        self.create_passthrough('tower.f2')
-        self.create_passthrough('tower.top_deflection')
-        self.create_passthrough('tower.stress')
-        self.create_passthrough('tower.z_buckling')
-        self.create_passthrough('tower.buckling')
-        self.create_passthrough('tower.damage')
+        # connections to outputs
+        self.connect('tower.mass', 'mass')
+        self.connect('tower.f1', 'f1')
+        self.connect('tower.f2', 'f2')
+        self.connect('tower.top_deflection', 'top_deflection')
+        self.connect('tower.stress', 'stress')
+        self.connect('tower.z_buckling', 'z_buckling')
+        self.connect('tower.buckling', 'buckling')
+        self.connect('tower.damage', 'damage')
 
 
 

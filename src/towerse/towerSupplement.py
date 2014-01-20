@@ -9,7 +9,7 @@ Copyright (c) NREL. All rights reserved.
 
 from math import sqrt, cos, atan2, pi
 import numpy as np
-from commonse.utilities import cubicSpline
+from commonse.utilities import CubicSplineSegment
 
 
 
@@ -55,7 +55,7 @@ def fatigue(M_DEL, N_DEL, d, t, m=4, DC=80.0, eta=1.265, stress_factor=1.0, weld
     if weld_factor:
         x1 = 24.0
         x2 = 26.0
-        coeff = cubicSpline(x1, x2, 1.0, (25.0/x2)**0.25, 0.0, 25.0**0.25*-0.25*x2**-1.25)
+        spline = CubicSplineSegment(x1, x2, 1.0, (25.0/x2)**0.25, 0.0, 25.0**0.25*-0.25*x2**-1.25)
 
 
     for i in range(nvec):
@@ -69,7 +69,7 @@ def fatigue(M_DEL, N_DEL, d, t, m=4, DC=80.0, eta=1.265, stress_factor=1.0, weld
         elif t >= x2:
             weld = (25.0/t)**0.25
         else:
-            weld = np.polyval(coeff, t)
+            weld = spline.eval(t)
 
 
         # stress
@@ -194,7 +194,8 @@ def _cxsmooth(omega, rovert):
         fR = 1.0
         gL = 1.83/ptL1**2 - 4.14/ptL1**3
         gR = 0.0
-        Cx = cubicSpline(ptL1, ptR1, fL, fR, gL, gR, omega)
+        cxspline = CubicSplineSegment(ptL1, ptR1, fL, fR, gL, gR)
+        Cx = cxspline.eval(omega)
 
     elif omega > ptR1 and omega < ptL2:
         Cx = 1.0
@@ -205,7 +206,8 @@ def _cxsmooth(omega, rovert):
         fR = 1 + 0.2/Cxb*(1-2.0*ptR2/rovert)
         gL = 0.0
         gR = -0.4/Cxb/rovert
-        Cx = cubicSpline(ptL2, ptR2, fL, fR, gL, gR, omega)
+        cxspline = CubicSplineSegment(ptL2, ptR2, fL, fR, gL, gR)
+        Cx = cxspline(omega)
 
     elif omega > ptR2 and omega < ptL3:
         Cx = 1 + 0.2/Cxb*(1-2.0*omega/rovert)
@@ -216,7 +218,8 @@ def _cxsmooth(omega, rovert):
         fR = 0.6
         gL = -0.4/Cxb/rovert
         gR = 0.0
-        Cx = cubicSpline(ptL3, ptR3, fL, fR, gL, gR, omega)
+        cxspline = CubicSplineSegment(ptL3, ptR3, fL, fR, gL, gR)
+        Cx = cxspline(omega)
 
     else:
         Cx = 0.6
