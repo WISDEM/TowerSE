@@ -259,7 +259,8 @@ class TowerDiscretization(Component):
     """discretize geometry into finite element nodes"""
 
     # in
-    z = Array(iotype='in', units='m', desc='locations along tower, linear lofting between')
+    towerHeight = Float(iotype='in', units='m')
+    z = Array(iotype='in', desc='locations along unit tower, linear lofting between')
     d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
     t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
     n = Array(iotype='in', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
@@ -272,6 +273,8 @@ class TowerDiscretization(Component):
     z_reinforced = Array(iotype='out')
 
     def execute(self):
+
+        self.z *= self.towerHeight  # TODO: fix gradients
 
         n1 = sum(self.n) + 1
         n2 = len(self.z)
@@ -480,7 +483,8 @@ class TowerBase(Component):
     """
 
     # geometry
-    z = Array(iotype='in', units='m', desc='locations along tower')
+    towerHeight = Float(iotype='in', units='m')
+    z = Array(iotype='in', desc='locations along unit tower')
     d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
     t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
     z_reinforced = Array(iotype='in', units='m', desc='reinforcement positions for buckling')
@@ -903,7 +907,8 @@ class TowerWithFrame3DD(TowerBase):
 class TowerSE(Assembly):
 
     # geometry
-    z = Array(iotype='in', units='m', desc='locations along tower, linear lofting between')
+    towerHeight = Float(iotype='in', units='m')
+    z = Array(iotype='in', desc='locations along unit tower, linear lofting between')
     d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
     t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
     n = Array(iotype='in', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
@@ -914,6 +919,11 @@ class TowerSE(Assembly):
     # environment
     wind_rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
     wind_mu = Float(1.7934e-5, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of air')
+
+    wind_Uref = Float(iotype='in', units='m/s', desc='reference wind speed (usually at hub height)')
+    wind_zref = Float(iotype='in', units='m', desc='corresponding reference height')
+    wind_z0 = Float(0.0, iotype='in', units='m', desc='bottom of wind profile (height of ground/sea)')
+
 
     wave_rho = Float(1027.0, iotype='in', units='kg/m**3', desc='water density')
     wave_mu = Float(1.3351e-3, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of water')
@@ -963,10 +973,11 @@ class TowerSE(Assembly):
     tower = Slot(TowerBase)
 
     # outputs
-    mass = Float(iotype='out')
+    mass = Float(iotype='out', units='kg')
     f1 = Float(iotype='out', units='Hz', desc='first natural frequency')
     f2 = Float(iotype='out', units='Hz', desc='second natural frequency')
     top_deflection = Float(iotype='out', units='m', desc='deflection of tower top in yaw-aligned +x direction')
+    z_nodes = Array(iotype='out', units='m')
     stress = Array(iotype='out', units='N/m**2', desc='von Mises stress along tower on downwind side (yaw-aligned +x).  normalized by yield stress.  includes safety factors.')
     z_buckling = Array(iotype='out', units='m', desc='z-locations along tower where shell buckling is evaluted')
     buckling = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
@@ -987,6 +998,7 @@ class TowerSE(Assembly):
         self.driver.workflow.add(['geometry', 'wind', 'wave', 'windLoads', 'waveLoads', 'soil', 'rna', 'rotorloads', 'tower'])
 
         # connections to geometry
+        self.connect('towerHeight', 'geometry.towerHeight')
         self.connect('z', 'geometry.z')
         self.connect('d', 'geometry.d')
         self.connect('t', 'geometry.t')
@@ -996,6 +1008,9 @@ class TowerSE(Assembly):
 
         # connections to wind
         self.connect('geometry.z_node', 'wind.z')
+        self.connect('wind_Uref', 'wind.Uref')
+        self.connect('wind_zref', 'wind.zref')
+        self.connect('wind_z0', 'wind.z0')
 
         # connections to wave
         self.connect('geometry.z_node', 'wave.z')
@@ -1070,6 +1085,7 @@ class TowerSE(Assembly):
         self.connect('tower.f1', 'f1')
         self.connect('tower.f2', 'f2')
         self.connect('tower.top_deflection', 'top_deflection')
+        self.connect('tower.z', 'z_nodes')
         self.connect('tower.stress', 'stress')
         self.connect('tower.z_buckling', 'z_buckling')
         self.connect('tower.buckling', 'buckling')
@@ -1166,8 +1182,8 @@ if __name__ == '__main__':
     # tower.replace('tower', TowerWithFrame3DD())
 
     # geometry
-    towerHt = 87.6
-    tower.z = towerHt*np.array([0.0, 0.5, 1.0])
+    tower.towerHeight = 87.6
+    tower.z = np.array([0.0, 0.5, 1.0])
     tower.d = [6.0, 4.935, 3.87]
     tower.t = [0.027*1.3, 0.023*1.3, 0.019*1.3]
     tower.n = [10, 10]
