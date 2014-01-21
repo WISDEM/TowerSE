@@ -456,6 +456,8 @@ class RotorLoads(Component):
     Q = Float(iotype='in', desc='torque in hub-aligned coordinate system')
     r_hub = Array(iotype='in', desc='position of rotor hub relative to tower top in yaw-aligned c.s.')
     tilt = Float(iotype='in', units='deg')
+    g = Float(9.81, iotype='in', units='m/s**2')
+    m_RNA = Float(iotype='in', units='kg')
 
     top_F = Array(iotype='out')  # in yaw-aligned
     top_M = Array(iotype='out')
@@ -465,13 +467,13 @@ class RotorLoads(Component):
         F = DirectionVector(self.T, 0.0, 0.0).hubToYaw(self.tilt)
         M = DirectionVector(self.Q, 0.0, 0.0).hubToYaw(self.tilt)
 
+        F.z -= self.m_RNA*self.g
+
         r = DirectionVector(self.r_hub[0], self.r_hub[1], self.r_hub[2])
         M = M - r.cross(F)
 
         self.top_F = np.array([F.x, F.y, F.z])
         self.top_M = np.array([M.x, M.y, M.z])
-
-        print 'check RotorLoads'
 
 
 
@@ -519,7 +521,7 @@ class TowerBase(Component):
     life = Float(20.0, iotype='in', desc='fatigue life of tower')
     m_SN = Int(4, iotype='in', desc='slope of S/N curve')
     DC = Float(80.0, iotype='in', desc='standard value of stress')
-    gamma_fatigue = Float(1.485, iotype='in', desc='total safety factor for fatigue')
+    gamma_fatigue = Float(1.755, iotype='in', desc='total safety factor for fatigue')
     z_DEL = Array(iotype='in')
     M_DEL = Array(iotype='in')
 
@@ -920,7 +922,8 @@ class TowerSE(Assembly):
     wind_rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
     wind_mu = Float(1.7934e-5, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of air')
 
-    wind_Uref = Float(iotype='in', units='m/s', desc='reference wind speed (usually at hub height)')
+    wind_Uref1 = Float(iotype='in', units='m/s', desc='reference wind speed (usually at hub height)')
+    wind_Uref2 = Float(iotype='in', units='m/s', desc='reference wind speed (usually at hub height)')
     wind_zref = Float(iotype='in', units='m', desc='corresponding reference height')
     wind_z0 = Float(0.0, iotype='in', units='m', desc='bottom of wind profile (height of ground/sea)')
 
@@ -932,8 +935,10 @@ class TowerSE(Assembly):
     g = Float(9.81, iotype='in', units='m/s**2')
 
     # rotor loads
-    rotorT = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
-    rotorQ = Float(iotype='in', desc='torque in hub-aligned coordinate system')
+    rotorT1 = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
+    rotorQ1 = Float(iotype='in', desc='torque in hub-aligned coordinate system')
+    rotorT2 = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
+    rotorQ2 = Float(iotype='in', desc='torque in hub-aligned coordinate system')
 
     # RNA mass properties
     blades_mass = Float(iotype='in', units='kg', desc='mass of all blade')
@@ -962,40 +967,56 @@ class TowerSE(Assembly):
     life = Float(20.0, iotype='in', desc='fatigue life of tower')
     m_SN = Int(4, iotype='in', desc='slope of S/N curve')
     DC = Float(80.0, iotype='in', desc='standard value of stress')
-    gamma_fatigue = Float(1.485, iotype='in', desc='total safety factor for fatigue')
+    gamma_fatigue = Float(1.755, iotype='in', desc='total safety factor for fatigue')
     z_DEL = Array(iotype='in')
     M_DEL = Array(iotype='in')
 
     # replace
-    wind = Slot(WindBase)
-    wave = Slot(WaveBase)
+    wind1 = Slot(WindBase)
+    wind2 = Slot(WindBase)
+    wave1 = Slot(WaveBase)
+    wave2 = Slot(WaveBase)
     soil = Slot(SoilBase)
-    tower = Slot(TowerBase)
+    tower1 = Slot(TowerBase)
+    tower2 = Slot(TowerBase)
 
     # outputs
     mass = Float(iotype='out', units='kg')
     f1 = Float(iotype='out', units='Hz', desc='first natural frequency')
     f2 = Float(iotype='out', units='Hz', desc='second natural frequency')
-    top_deflection = Float(iotype='out', units='m', desc='deflection of tower top in yaw-aligned +x direction')
+    top_deflection1 = Float(iotype='out', units='m', desc='deflection of tower top in yaw-aligned +x direction')
+    top_deflection2 = Float(iotype='out', units='m', desc='deflection of tower top in yaw-aligned +x direction')
     z_nodes = Array(iotype='out', units='m')
-    stress = Array(iotype='out', units='N/m**2', desc='von Mises stress along tower on downwind side (yaw-aligned +x).  normalized by yield stress.  includes safety factors.')
+    stress1 = Array(iotype='out', units='N/m**2', desc='von Mises stress along tower on downwind side (yaw-aligned +x).  normalized by yield stress.  includes safety factors.')
+    stress2 = Array(iotype='out', units='N/m**2', desc='von Mises stress along tower on downwind side (yaw-aligned +x).  normalized by yield stress.  includes safety factors.')
     z_buckling = Array(iotype='out', units='m', desc='z-locations along tower where shell buckling is evaluted')
-    buckling = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
+    buckling1 = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
+    buckling2 = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
     damage = Array(iotype='out', desc='fatigue damage at each tower section')
 
     def configure(self):
 
         self.add('geometry', TowerDiscretization())
-        self.add('wind', WindBase())
-        self.add('wave', WaveBase())
-        self.add('windLoads', TowerWindDrag())
-        self.add('waveLoads', TowerWaveDrag())
+        self.add('wind1', WindBase())
+        self.add('wind2', WindBase())
+        self.add('wave1', WaveBase())
+        self.add('wave2', WaveBase())
+        self.add('windLoads1', TowerWindDrag())
+        self.add('windLoads2', TowerWindDrag())
+        self.add('waveLoads1', TowerWaveDrag())
+        self.add('waveLoads2', TowerWaveDrag())
         self.add('soil', SoilBase())
         self.add('rna', RNAMass())
-        self.add('rotorloads', RotorLoads())
-        self.add('tower', TowerBase())
+        self.add('rotorloads1', RotorLoads())
+        self.add('rotorloads2', RotorLoads())
+        self.add('tower1', TowerBase())
+        self.add('tower2', TowerBase())
 
-        self.driver.workflow.add(['geometry', 'wind', 'wave', 'windLoads', 'waveLoads', 'soil', 'rna', 'rotorloads', 'tower'])
+        # self.driver.workflow.add(['geometry', 'wind', 'wave', 'windLoads', 'waveLoads', 'soil', 'rna', 'rotorloads', 'tower'])
+        self.driver.workflow.add(['geometry', 'wind1', 'wind2', 'wave1', 'wave2',
+            'windLoads1', 'windLoads2', 'waveLoads1', 'waveLoads2', 'soil', 'rna',
+            'rotorloads1', 'rotorloads2', 'tower1', 'tower2'])
+        # TODO: probably better to do this with a driver or something rather than manually setting 2 cases
 
         # connections to geometry
         self.connect('towerHeight', 'geometry.towerHeight')
@@ -1006,32 +1027,59 @@ class TowerSE(Assembly):
         self.connect('n_reinforced', 'geometry.n_reinforced')
 
 
-        # connections to wind
-        self.connect('geometry.z_node', 'wind.z')
-        self.connect('wind_Uref', 'wind.Uref')
-        self.connect('wind_zref', 'wind.zref')
-        self.connect('wind_z0', 'wind.z0')
+        # connections to wind1
+        self.connect('geometry.z_node', 'wind1.z')
+        self.connect('wind_Uref1', 'wind1.Uref')
+        self.connect('wind_zref', 'wind1.zref')
+        self.connect('wind_z0', 'wind1.z0')
 
-        # connections to wave
-        self.connect('geometry.z_node', 'wave.z')
+        # connections to wind2
+        self.connect('geometry.z_node', 'wind2.z')
+        self.connect('wind_Uref2', 'wind2.Uref')
+        self.connect('wind_zref', 'wind2.zref')
+        self.connect('wind_z0', 'wind2.z0')
 
-        # connections to wind loads
-        self.connect('wind.U', 'windLoads.U')
-        self.connect('wind.beta', 'windLoads.beta')
-        self.connect('wind_rho', 'windLoads.rho')
-        self.connect('wind_mu', 'windLoads.mu')
-        self.connect('geometry.z_node', 'windLoads.z')
-        self.connect('geometry.d_node', 'windLoads.d')
+        # connections to wave1
+        self.connect('geometry.z_node', 'wave1.z')
 
-        # connections to wave loads
-        self.connect('wave.U', 'waveLoads.U')
-        self.connect('wave.A', 'waveLoads.A')
-        self.connect('wave.beta', 'waveLoads.beta')
-        self.connect('wave_rho', 'waveLoads.rho')
-        self.connect('wave_mu', 'waveLoads.mu')
-        self.connect('wave_cm', 'waveLoads.cm')
-        self.connect('geometry.z_node', 'waveLoads.z')
-        self.connect('geometry.d_node', 'waveLoads.d')
+        # connections to wave2
+        self.connect('geometry.z_node', 'wave2.z')
+
+        # connections to windLoads1
+        self.connect('wind1.U', 'windLoads1.U')
+        self.connect('wind1.beta', 'windLoads1.beta')
+        self.connect('wind_rho', 'windLoads1.rho')
+        self.connect('wind_mu', 'windLoads1.mu')
+        self.connect('geometry.z_node', 'windLoads1.z')
+        self.connect('geometry.d_node', 'windLoads1.d')
+
+        # connections to windLoads2
+        self.connect('wind2.U', 'windLoads2.U')
+        self.connect('wind2.beta', 'windLoads2.beta')
+        self.connect('wind_rho', 'windLoads2.rho')
+        self.connect('wind_mu', 'windLoads2.mu')
+        self.connect('geometry.z_node', 'windLoads2.z')
+        self.connect('geometry.d_node', 'windLoads2.d')
+
+        # connections to waveLoads1
+        self.connect('wave1.U', 'waveLoads1.U')
+        self.connect('wave1.A', 'waveLoads1.A')
+        self.connect('wave1.beta', 'waveLoads1.beta')
+        self.connect('wave_rho', 'waveLoads1.rho')
+        self.connect('wave_mu', 'waveLoads1.mu')
+        self.connect('wave_cm', 'waveLoads1.cm')
+        self.connect('geometry.z_node', 'waveLoads1.z')
+        self.connect('geometry.d_node', 'waveLoads1.d')
+
+        # connections to waveLoads2
+        self.connect('wave2.U', 'waveLoads2.U')
+        self.connect('wave2.A', 'waveLoads2.A')
+        self.connect('wave2.beta', 'waveLoads2.beta')
+        self.connect('wave_rho', 'waveLoads2.rho')
+        self.connect('wave_mu', 'waveLoads2.mu')
+        self.connect('wave_cm', 'waveLoads2.cm')
+        self.connect('geometry.z_node', 'waveLoads2.z')
+        self.connect('geometry.d_node', 'waveLoads2.d')
 
         # connections to rna
         self.connect('blades_mass', 'rna.blades_mass')
@@ -1043,53 +1091,94 @@ class TowerSE(Assembly):
         self.connect('nac_cm', 'rna.nac_cm')
         self.connect('nac_I', 'rna.nac_I')
 
-        # connections to rotorloads
-        self.connect('rotorT', 'rotorloads.T')
-        self.connect('rotorQ', 'rotorloads.Q')
-        self.connect('hub_cm', 'rotorloads.r_hub')
-        self.connect('tilt', 'rotorloads.tilt')
+        # connections to rotorloads1
+        self.connect('rotorT1', 'rotorloads1.T')
+        self.connect('rotorQ1', 'rotorloads1.Q')
+        self.connect('hub_cm', 'rotorloads1.r_hub')
+        self.connect('tilt', 'rotorloads1.tilt')
+        self.connect('g', 'rotorloads1.g')
+        self.connect('rna.rna_mass', 'rotorloads1.m_RNA')
 
+        # connections to rotorloads2
+        self.connect('rotorT2', 'rotorloads2.T')
+        self.connect('rotorQ2', 'rotorloads2.Q')
+        self.connect('hub_cm', 'rotorloads2.r_hub')
+        self.connect('tilt', 'rotorloads2.tilt')
+        self.connect('g', 'rotorloads2.g')
+        self.connect('rna.rna_mass', 'rotorloads2.m_RNA')
 
         # connections to tower
-        self.connect('geometry.z_node', 'tower.z')
-        self.connect('geometry.d_node', 'tower.d')
-        self.connect('geometry.t_node', 'tower.t')
-        self.connect('geometry.z_reinforced', 'tower.z_reinforced')
-        self.connect('windLoads.windLoads', 'tower.windLoads')
-        self.connect('waveLoads.waveLoads', 'tower.waveLoads')
-        self.connect('soil.k', 'tower.k_soil')
-        self.connect('rna.rna_mass', 'tower.top_m')
-        self.connect('rna.rna_cm', 'tower.top_cm')
-        self.connect('rna.rna_I_TT', 'tower.top_I')
-        self.connect('rotorloads.top_F', 'tower.top_F')
-        self.connect('rotorloads.top_M', 'tower.top_M')
-        self.connect('yaw', 'tower.yaw')
-        self.connect('g', 'tower.g')
-        self.connect('E', 'tower.E')
-        self.connect('G', 'tower.G')
-        self.connect('rho', 'tower.rho')
-        self.connect('sigma_y', 'tower.sigma_y')
-        self.connect('gamma_f', 'tower.gamma_f')
-        self.connect('gamma_m', 'tower.gamma_m')
-        self.connect('gamma_n', 'tower.gamma_n')
-        self.connect('life', 'tower.life')
-        self.connect('m_SN', 'tower.m_SN')
-        self.connect('DC', 'tower.DC')
-        self.connect('gamma_fatigue', 'tower.gamma_fatigue')
-        self.connect('z_DEL', 'tower.z_DEL')
-        self.connect('M_DEL', 'tower.M_DEL')
+        self.connect('geometry.z_node', 'tower1.z')
+        self.connect('geometry.d_node', 'tower1.d')
+        self.connect('geometry.t_node', 'tower1.t')
+        self.connect('geometry.z_reinforced', 'tower1.z_reinforced')
+        self.connect('windLoads1.windLoads', 'tower1.windLoads')
+        self.connect('waveLoads1.waveLoads', 'tower1.waveLoads')
+        self.connect('soil.k', 'tower1.k_soil')
+        self.connect('rna.rna_mass', 'tower1.top_m')
+        self.connect('rna.rna_cm', 'tower1.top_cm')
+        self.connect('rna.rna_I_TT', 'tower1.top_I')
+        self.connect('rotorloads1.top_F', 'tower1.top_F')
+        self.connect('rotorloads1.top_M', 'tower1.top_M')
+        self.connect('yaw', 'tower1.yaw')
+        self.connect('g', 'tower1.g')
+        self.connect('E', 'tower1.E')
+        self.connect('G', 'tower1.G')
+        self.connect('rho', 'tower1.rho')
+        self.connect('sigma_y', 'tower1.sigma_y')
+        self.connect('gamma_f', 'tower1.gamma_f')
+        self.connect('gamma_m', 'tower1.gamma_m')
+        self.connect('gamma_n', 'tower1.gamma_n')
+        self.connect('life', 'tower1.life')
+        self.connect('m_SN', 'tower1.m_SN')
+        self.connect('DC', 'tower1.DC')
+        self.connect('gamma_fatigue', 'tower1.gamma_fatigue')
+        self.connect('z_DEL', 'tower1.z_DEL')
+        self.connect('M_DEL', 'tower1.M_DEL')
+
+        # connections to tower
+        self.connect('geometry.z_node', 'tower2.z')
+        self.connect('geometry.d_node', 'tower2.d')
+        self.connect('geometry.t_node', 'tower2.t')
+        self.connect('geometry.z_reinforced', 'tower2.z_reinforced')
+        self.connect('windLoads2.windLoads', 'tower2.windLoads')
+        self.connect('waveLoads2.waveLoads', 'tower2.waveLoads')
+        self.connect('soil.k', 'tower2.k_soil')
+        self.connect('rna.rna_mass', 'tower2.top_m')
+        self.connect('rna.rna_cm', 'tower2.top_cm')
+        self.connect('rna.rna_I_TT', 'tower2.top_I')
+        self.connect('rotorloads2.top_F', 'tower2.top_F')
+        self.connect('rotorloads2.top_M', 'tower2.top_M')
+        self.connect('yaw', 'tower2.yaw')
+        self.connect('g', 'tower2.g')
+        self.connect('E', 'tower2.E')
+        self.connect('G', 'tower2.G')
+        self.connect('rho', 'tower2.rho')
+        self.connect('sigma_y', 'tower2.sigma_y')
+        self.connect('gamma_f', 'tower2.gamma_f')
+        self.connect('gamma_m', 'tower2.gamma_m')
+        self.connect('gamma_n', 'tower2.gamma_n')
+        self.connect('life', 'tower2.life')
+        self.connect('m_SN', 'tower2.m_SN')
+        self.connect('DC', 'tower2.DC')
+        self.connect('gamma_fatigue', 'tower2.gamma_fatigue')
+        self.connect('z_DEL', 'tower2.z_DEL')
+        self.connect('M_DEL', 'tower2.M_DEL')
 
 
         # connections to outputs
-        self.connect('tower.mass', 'mass')
-        self.connect('tower.f1', 'f1')
-        self.connect('tower.f2', 'f2')
-        self.connect('tower.top_deflection', 'top_deflection')
-        self.connect('tower.z', 'z_nodes')
-        self.connect('tower.stress', 'stress')
-        self.connect('tower.z_buckling', 'z_buckling')
-        self.connect('tower.buckling', 'buckling')
-        self.connect('tower.damage', 'damage')
+        self.connect('tower1.mass', 'mass')
+        self.connect('tower1.f1', 'f1')
+        self.connect('tower1.f2', 'f2')
+        self.connect('tower1.top_deflection', 'top_deflection1')
+        self.connect('tower2.top_deflection', 'top_deflection2')
+        self.connect('tower1.z', 'z_nodes')
+        self.connect('tower1.stress', 'stress1')
+        self.connect('tower2.stress', 'stress2')
+        self.connect('tower1.z_buckling', 'z_buckling')
+        self.connect('tower1.buckling', 'buckling1')
+        self.connect('tower2.buckling', 'buckling2')
+        self.connect('tower1.damage', 'damage')
 
 
 
