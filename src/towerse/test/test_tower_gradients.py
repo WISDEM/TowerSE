@@ -9,8 +9,8 @@ Copyright (c) NREL. All rights reserved.
 
 import unittest
 import numpy as np
-from commonse.utilities import check_gradient
-from towerse.tower import TowerWindDrag, TowerWaveDrag, TowerDiscretization, RNAMass
+from commonse.utilities import check_gradient, check_gradient_unit_test
+from towerse.tower import TowerWindDrag, TowerWaveDrag, TowerDiscretization, RNAMass, RotorLoads
 
 
 class TestTowerWindDrag(unittest.TestCase):
@@ -79,22 +79,14 @@ class TestTowerDiscretization(unittest.TestCase):
     def test1(self):
 
         td = TowerDiscretization()
-        td.z = np.array([0.0, 43.8, 87.6])
+        td.towerHeight = 87.6
+        td.z = np.array([0.0, 0.5, 1.0])
         td.d = np.array([6.0, 4.935, 3.87])
         td.t = np.array([0.0351, 0.0299, 0.0247])
         td.n = np.array([10, 7])
         td.n_reinforced = 3
 
-        names, errors = check_gradient(td)
-
-        tol = 1e-6
-        for name, err in zip(names, errors):
-
-            try:
-                self.assertLessEqual(err, tol)
-            except AssertionError, e:
-                print '*** error in:', name
-                raise e
+        check_gradient_unit_test(self, td)
 
 
 
@@ -103,27 +95,32 @@ class TestRNAMass(unittest.TestCase):
     def test1(self):
 
         rna = RNAMass()
-        rna.blade_mass = 15241.323
+        rna.blades_mass = 15241.323 * 3
         rna.hub_mass = 50421.4
         rna.nac_mass = 221245.8
         rna.hub_cm = [-6.3, 0., 3.15]
         rna.nac_cm = [-0.32, 0., 2.4]
-        rna.blade_I = [26375976., 13187988., 13187988., 0., 0., 0.]
+        rna.blades_I = [26375976., 13187988., 13187988., 0., 0., 0.]
         rna.hub_I = [127297.8, 127297.8, 127297.8, 0., 0., 0.]
         rna.nac_I = [9908302.58, 912488.28, 1160903.54, 0., 0., 0.]
-        rna.nBlades = 3
 
-        names, errors = check_gradient(rna)
+        check_gradient_unit_test(self, rna, tol=1e-5)
 
-        tol = 1e-5
-        for name, err in zip(names, errors):
 
-            try:
-                self.assertLessEqual(err, tol)
-            except AssertionError, e:
-                print '*** error in:', name
-                raise e
 
+class TestRotorLoads(unittest.TestCase):
+
+    def test1(self):
+
+        loads = RotorLoads()
+        loads.T = 123.0
+        loads.Q = 4843.0
+        loads.r_hub = [2.0, -3.2, 4.5]
+        loads.m_RNA = 200.0
+        loads.tilt = 13.2
+        loads.g = 9.81
+
+        check_gradient_unit_test(self, loads)
 
 
 

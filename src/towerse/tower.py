@@ -12,7 +12,7 @@ import numpy as np
 from openmdao.main.api import VariableTree, Component, Assembly
 from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot
 
-from commonse.utilities import sind, cosd, linspace_with_deriv, interp_with_deriv
+from commonse.utilities import sind, cosd, linspace_with_deriv, interp_with_deriv, hstack, vstack
 from commonse.csystem import DirectionVector
 from commonse.environment import WindBase, WaveBase, SoilBase
 from towerSupplement import shellBuckling, fatigue
@@ -25,7 +25,7 @@ Re_pt = [0.00001, 0.0001, 0.0010, 0.0100, 0.0200, 0.1220, 0.2000, 0.3000, 0.4000
 cd_pt = [4.0000,  2.0000, 1.1100, 1.1100, 1.2000, 1.2000, 1.1700, 0.9000, 0.5400,
          0.3100, 0.3800, 0.4600, 0.5300, 0.5700, 0.6100, 0.6400, 0.6700, 0.7000, 0.7000]
 
-drag_spline = Akima(np.log10(Re_pt), cd_pt, delta_x=0.0)
+drag_spline = Akima(np.log10(Re_pt), cd_pt, delta_x=0.0)  # exact akima because control points do not change
 
 
 # -----------------
@@ -83,7 +83,6 @@ class AeroLoads(VariableTree):
 class TowerWindDrag(Component):
     """drag forces on a cylindrical tower due to wind"""
 
-    # TODO: add required=True back into these Arrays. openmdao bug.  Also in wave
     # variables
     U = Array(iotype='in', units='m/s', desc='magnitude of wind speed')
     z = Array(iotype='in', units='m', desc='heights where wind speed was computed')
@@ -96,6 +95,8 @@ class TowerWindDrag(Component):
 
     # out
     windLoads = VarTree(AeroLoads(), iotype='out', desc='wind loads in inertial coordinate system')
+
+    missing_deriv_policy = 'assume_zero'
 
 
     def execute(self):
@@ -138,7 +139,15 @@ class TowerWindDrag(Component):
         self.dPy_dd = const*sind(beta)
 
 
-    def linearize(self):
+    def list_deriv_vars(self):
+
+        inputs = ('U', 'z', 'd')
+        outputs = ('windLoads.Px', 'windLoads.Py', 'windLoads.Pz', 'windLoads.q', 'windLoads.z')
+
+        return inputs, outputs
+
+
+    def provideJ(self):
 
         n = len(self.z)
 
@@ -150,15 +159,11 @@ class TowerWindDrag(Component):
         dq = np.hstack([np.diag(self.dq_dU), np.zeros((n, 2*n))])
         dz = np.hstack([zeron, np.eye(n), zeron])
 
-        self.J = np.vstack([dPx, dPy, dPz, dq, dz])
+        J = np.vstack([dPx, dPy, dPz, dq, dz])
+
+        return J
 
 
-    def provideJ(self):
-
-        inputs = ('U', 'z', 'd')
-        outputs = ('windLoads.Px', 'windLoads.Py', 'windLoads.Pz', 'windLoads.q', 'windLoads.z')
-
-        return inputs, outputs, self.J
 
 
 
@@ -179,6 +184,9 @@ class TowerWaveDrag(Component):
 
     # out
     waveLoads = VarTree(AeroLoads(), iotype='out', desc='wave loads in inertial coordinate system')
+
+
+    missing_deriv_policy = 'assume_zero'
 
 
     def execute(self):
@@ -229,7 +237,15 @@ class TowerWaveDrag(Component):
         self.dPy_dA = const*sind(beta)
 
 
-    def linearize(self):
+    def list_deriv_vars(self):
+
+        inputs = ('U', 'A', 'z', 'd')
+        outputs = ('waveLoads.Px', 'waveLoads.Py', 'waveLoads.Pz', 'waveLoads.q', 'waveLoads.z')
+
+        return inputs, outputs
+
+
+    def provideJ(self):
 
         n = len(self.z)
 
@@ -241,15 +257,11 @@ class TowerWaveDrag(Component):
         dq = np.hstack([np.diag(self.dq_dU), np.zeros((n, 3*n))])
         dz = np.hstack([zeron, zeron, np.eye(n), zeron])
 
-        self.J = np.vstack([dPx, dPy, dPz, dq, dz])
+        J = np.vstack([dPx, dPy, dPz, dq, dz])
+
+        return J
 
 
-    def provideJ(self):
-
-        inputs = ('U', 'A', 'z', 'd')
-        outputs = ('waveLoads.Px', 'waveLoads.Py', 'waveLoads.Pz', 'waveLoads.q', 'waveLoads.z')
-
-        return inputs, outputs, self.J
 
 
 
@@ -258,11 +270,13 @@ class TowerWaveDrag(Component):
 class TowerDiscretization(Component):
     """discretize geometry into finite element nodes"""
 
-    # in
+    # variables
     towerHeight = Float(iotype='in', units='m')
     z = Array(iotype='in', desc='locations along unit tower, linear lofting between')
     d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
     t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
+
+    # parameters
     n = Array(iotype='in', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
     n_reinforced = Int(iotype='in', desc='must be a minimum of 1 (top and bottom)')
 
@@ -272,9 +286,11 @@ class TowerDiscretization(Component):
     t_node = Array(iotype='out', units='m', desc='shell thickness at corresponding locations')
     z_reinforced = Array(iotype='out')
 
-    def execute(self):
 
-        self.z *= self.towerHeight  # TODO: fix gradients
+    missing_deriv_policy = 'assume_zero'
+
+
+    def execute(self):
 
         n1 = sum(self.n) + 1
         n2 = len(self.z)
@@ -312,28 +328,38 @@ class TowerDiscretization(Component):
         self.dzr_dz[:, 0] = dzr_dz0
         self.dzr_dz[:, -1] = dzr_dzend
 
+        # make dimensional
+        towerHt = self.towerHeight
+        self.z_node *= towerHt
+        self.z_reinforced *= towerHt
+        self.dznode_dz *= towerHt
+        self.dzr_dz *= towerHt
 
 
-    def linearize(self):
+    def list_deriv_vars(self):
+
+        inputs = ('towerHeight', 'z', 'd', 't')
+        outputs = ('z_node', 'd_node', 't_node', 'z_reinforced')
+
+        return inputs, outputs
+
+
+    def provideJ(self):
 
         n = len(self.z_node)
         m = len(self.z)
         n2 = len(self.z_reinforced)
 
-        dzn = np.hstack([self.dznode_dz, np.zeros((n, 2*m))])
-        ddn = np.hstack([self.ddnode_dz, self.ddnode_dd, np.zeros((n, m))])
-        dtn = np.hstack([self.dtnode_dz, np.zeros((n, m)), self.dtnode_dt])
-        dzr = np.hstack([self.dzr_dz, np.zeros((n2, 2*m))])
+        dzn = hstack([self.z_node/self.towerHeight, self.dznode_dz, np.zeros((n, 2*m))])
+        ddn = hstack([np.zeros(n), self.ddnode_dz, self.ddnode_dd, np.zeros((n, m))])
+        dtn = hstack([np.zeros(n), self.dtnode_dz, np.zeros((n, m)), self.dtnode_dt])
+        dzr = hstack([self.z_reinforced/self.towerHeight, self.dzr_dz, np.zeros((n2, 2*m))])
 
-        self.J = np.vstack([dzn, ddn, dtn, dzr])
+        J = np.vstack([dzn, ddn, dtn, dzr])
+
+        return J
 
 
-    def provideJ(self):
-
-        inputs = ('z', 'd', 't')
-        outputs = ('z_node', 'd_node', 't_node', 'z_reinforced')
-
-        return inputs, outputs, self.J
 
 
 class RNAMass(Component):
@@ -351,8 +377,6 @@ class RNAMass(Component):
     blades_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of all blades about hub center')
     hub_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of hub about its center of mass')
     nac_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of nacelle about its center of mass')
-
-    # TODO: fix gradients
 
     # outputs
     rna_mass = Float(iotype='out', units='kg', desc='total mass of RNA')
@@ -394,27 +418,34 @@ class RNAMass(Component):
         self.rna_I_TT = self._unassembleI(rotor_I_TT + nac_I_TT)
 
 
-    def linearize(self):
+    def list_deriv_vars(self):
+
+        inputs = ('blades_mass', 'hub_mass', 'nac_mass', 'hub_cm', 'nac_cm', 'blades_I', 'hub_I', 'nac_I')
+        outputs = ('rna_mass', 'rna_cm', 'rna_I_TT')
+
+        return inputs, outputs
+
+
+    def provideJ(self):
 
         # mass
-        dmass = np.hstack([np.array([self.nBlades, 1.0, 1.0]), np.zeros(2*3+3*6)])
+        dmass = np.hstack([np.array([1.0, 1.0, 1.0]), np.zeros(2*3+3*6)])
 
         # cm
         top = (self.rotor_mass*self.hub_cm + self.nac_mass*self.nac_cm)
-        dcm_dblademass = (self.rna_mass*self.nBlades*self.hub_cm - top*self.nBlades)/self.rna_mass**2
+        dcm_dblademass = (self.rna_mass*self.hub_cm - top)/self.rna_mass**2
         dcm_dhubmass = (self.rna_mass*self.hub_cm - top)/self.rna_mass**2
         dcm_dnacmass = (self.rna_mass*self.nac_cm - top)/self.rna_mass**2
         dcm_dhubcm = self.rotor_mass/self.rna_mass*np.eye(3)
         dcm_dnaccm = self.nac_mass/self.rna_mass*np.eye(3)
 
-        dcm = np.hstack([dcm_dblademass[:, np.newaxis], dcm_dhubmass[:, np.newaxis],
-            dcm_dnacmass[:, np.newaxis], dcm_dhubcm, dcm_dnaccm, np.zeros((3, 3*6))])
+        dcm = hstack([dcm_dblademass, dcm_dhubmass, dcm_dnacmass, dcm_dhubcm,
+            dcm_dnaccm, np.zeros((3, 3*6))])
 
         # I
         R = self.hub_cm
         const = self._unassembleI(np.dot(R, R)*np.eye(3) - np.outer(R, R))
-        const = const[:, np.newaxis]
-        dI_dblademass = self.nBlades*const
+        dI_dblademass = const
         dI_dhubmass = const
         dI_drx = self.rotor_mass*self._unassembleI(2*R[0]*np.eye(3) - np.array([[2*R[0], R[1], R[2]], [R[1], 0.0, 0.0], [R[2], 0.0, 0.0]]))
         dI_dry = self.rotor_mass*self._unassembleI(2*R[1]*np.eye(3) - np.array([[0.0, R[0], 0.0], [R[0], 2*R[1], R[2]], [0.0, R[2], 0.0]]))
@@ -423,7 +454,6 @@ class RNAMass(Component):
 
         R = self.nac_cm
         const = self._unassembleI(np.dot(R, R)*np.eye(3) - np.outer(R, R))
-        const = const[:, np.newaxis]
         dI_dnacmass = const
         dI_drx = self.nac_mass*self._unassembleI(2*R[0]*np.eye(3) - np.array([[2*R[0], R[1], R[2]], [R[1], 0.0, 0.0], [R[2], 0.0, 0.0]]))
         dI_dry = self.nac_mass*self._unassembleI(2*R[1]*np.eye(3) - np.array([[0.0, R[0], 0.0], [R[0], 2*R[1], R[2]], [0.0, R[2], 0.0]]))
@@ -434,33 +464,34 @@ class RNAMass(Component):
         dI_dhubI = np.eye(6)
         dI_dnacI = np.eye(6)
 
-        dI = np.hstack([dI_dblademass, dI_dhubmass, dI_dnacmass, dI_dhubcm, dI_dnaccm,
+        dI = hstack([dI_dblademass, dI_dhubmass, dI_dnacmass, dI_dhubcm, dI_dnaccm,
             dI_dbladeI, dI_dhubI, dI_dnacI])
 
-        self.J = np.vstack([dmass, dcm, dI])
+        J = np.vstack([dmass, dcm, dI])
+
+        return J
 
 
 
-    def provideJ(self):
-
-        inputs = ('blade_mass', 'hub_mass', 'nac_mass', 'hub_cm', 'nac_cm', 'blade_I', 'hub_I', 'nac_I')
-        outputs = ('rna_mass', 'rna_cm', 'rna_I_TT')
-
-        return inputs, outputs, self.J
 
 
 
 class RotorLoads(Component):
 
+    # variables
     T = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
     Q = Float(iotype='in', desc='torque in hub-aligned coordinate system')
     r_hub = Array(iotype='in', desc='position of rotor hub relative to tower top in yaw-aligned c.s.')
+    m_RNA = Float(iotype='in', units='kg', desc='mass of rotor nacelle assembly')
+
+    # parameters
     tilt = Float(iotype='in', units='deg')
     g = Float(9.81, iotype='in', units='m/s**2')
-    m_RNA = Float(iotype='in', units='kg')
 
+    # out
     top_F = Array(iotype='out')  # in yaw-aligned
     top_M = Array(iotype='out')
+
 
     def execute(self):
 
@@ -470,10 +501,49 @@ class RotorLoads(Component):
         F.z -= self.m_RNA*self.g
 
         r = DirectionVector(self.r_hub[0], self.r_hub[1], self.r_hub[2])
+        self.saveF = F
         M = M - r.cross(F)
 
         self.top_F = np.array([F.x, F.y, F.z])
         self.top_M = np.array([M.x, M.y, M.z])
+
+
+    def list_deriv_vars(self):
+
+        inputs = ('T', 'Q', 'r_hub', 'm_RNA')
+        outputs = ('top_F', 'top_M')
+
+        return inputs, outputs
+
+    def provideJ(self):
+
+        # TODO: Start HERE
+        # Add derivatives to the csystem transformation methods
+
+        dFx, dFy, dFz = DirectionVector(self.T, 0.0, 0.0).hubToYaw(self.tilt, derivatives=True)
+
+        dtopF_dT = np.array([dFx['dx'], dFy['dx'], dFz['dx']])
+        dtopF_dm = np.array([0.0, 0.0, -self.g])
+
+        dtopF = hstack([dtopF_dT, np.zeros((3, 4)), dtopF_dm])
+
+
+        dMx, dMy, dMz = DirectionVector(self.Q, 0.0, 0.0).hubToYaw(self.tilt, derivatives=True)
+        r = DirectionVector(self.r_hub[0], self.r_hub[1], self.r_hub[2])
+        dMxcross, dMycross, dMzcross = r.cross_deriv(self.saveF, 'dr', 'dF')
+
+        dtopM_dQ = np.array([dMx['dx'], dMy['dx'], dMz['dx']])
+        dM_dF = np.array([-dMxcross['dF'], -dMycross['dF'], -dMzcross['dF']])
+
+        dtopM_dT = np.dot(dM_dF, dtopF_dT)
+        dtopM_dm = np.dot(dM_dF, dtopF_dm)
+        dtopM_dr = np.array([-dMxcross['dr'], -dMycross['dr'], -dMzcross['dr']])
+
+        dtopM = hstack([dtopM_dT, dtopM_dQ, dtopM_dr, dtopM_dm])
+
+        J = vstack([dtopF, dtopM])
+
+        return J
 
 
 
