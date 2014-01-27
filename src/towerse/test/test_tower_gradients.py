@@ -10,7 +10,7 @@ Copyright (c) NREL. All rights reserved.
 import unittest
 import numpy as np
 from commonse.utilities import check_gradient, check_gradient_unit_test
-from towerse.tower import TowerWindDrag, TowerWaveDrag, TowerDiscretization, RNAMass, RotorLoads
+from towerse.tower import TowerWindDrag, TowerWaveDrag, TowerDiscretization, RNAMass, RotorLoads, GeometricConstraints
 
 
 class TestTowerWindDrag(unittest.TestCase):
@@ -122,6 +122,18 @@ class TestRotorLoads(unittest.TestCase):
 
         check_gradient_unit_test(self, loads)
 
+
+
+class TestGeometricConstraints(unittest.TestCase):
+
+    def test1(self):
+
+        gc = GeometricConstraints()
+        gc.d = [4.0, 3.0, 2.0]
+        gc.t = [0.4, 0.23, 0.14]
+
+
+        check_gradient_unit_test(self, gc)
 
 
 

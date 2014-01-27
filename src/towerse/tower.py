@@ -547,6 +547,51 @@ class RotorLoads(Component):
 
 
 
+class GeometricConstraints(Component):
+    """docstring for OtherConstraints"""
+
+    d = Array(iotype='in')
+    t = Array(iotype='in')
+    min_d_to_t = Float(120.0, iotype='in')
+    min_taper = Float(0.4, iotype='in')
+
+    weldability = Array(iotype='out')
+    manufactuability = Float(iotype='out')
+
+
+    def execute(self):
+
+        self.weldability = (self.min_d_to_t - self.d/self.t) / self.min_d_to_t
+        self.manufactuability = self.min_taper - self.d[-1] / self.d[0]  # taper ratio
+
+
+    def list_deriv_vars(self):
+
+        inputs = ('d', 't')
+        outputs = ('weldability', 'manufactuability')
+
+        return inputs, outputs
+
+
+    def provideJ(self):
+
+        dw_dd = np.diag(-1.0/self.t/self.min_d_to_t)
+        dw_dt = np.diag(self.d/self.t**2/self.min_d_to_t)
+
+        dw = np.hstack([dw_dd, dw_dt])
+
+
+        dm_dd = np.zeros_like(self.d)
+        dm_dd[0] = self.d[-1]/self.d[0]**2
+        dm_dd[-1] = -1.0/self.d[0]
+
+        dm = np.hstack([dm_dd, np.zeros(len(self.t))])
+
+        J = np.vstack([dw, dm])
+
+        return J
+
+
 
 class TowerBase(Component):
     """structural analysis of cylindrical tower
@@ -1003,6 +1048,9 @@ class TowerSE(Assembly):
     wave_cm = Float(2.0, iotype='in', desc='mass coefficient')
 
     g = Float(9.81, iotype='in', units='m/s**2')
+    min_d_to_t = Float(120.0, iotype='in')
+    min_taper = Float(0.4, iotype='in')
+
 
     # rotor loads
     rotorT1 = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
@@ -1063,6 +1111,9 @@ class TowerSE(Assembly):
     buckling1 = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
     buckling2 = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
     damage = Array(iotype='out', desc='fatigue damage at each tower section')
+    weldability = Array(iotype='out')
+    manufactuability = Float(iotype='out')
+
 
     def configure(self):
 
@@ -1081,11 +1132,12 @@ class TowerSE(Assembly):
         self.add('rotorloads2', RotorLoads())
         self.add('tower1', TowerBase())
         self.add('tower2', TowerBase())
+        self.add('gc', GeometricConstraints())
 
         # self.driver.workflow.add(['geometry', 'wind', 'wave', 'windLoads', 'waveLoads', 'soil', 'rna', 'rotorloads', 'tower'])
         self.driver.workflow.add(['geometry', 'wind1', 'wind2', 'wave1', 'wave2',
             'windLoads1', 'windLoads2', 'waveLoads1', 'waveLoads2', 'soil', 'rna',
-            'rotorloads1', 'rotorloads2', 'tower1', 'tower2'])
+            'rotorloads1', 'rotorloads2', 'tower1', 'tower2', 'gc'])
         # TODO: probably better to do this with a driver or something rather than manually setting 2 cases
 
         # connections to geometry
@@ -1235,6 +1287,13 @@ class TowerSE(Assembly):
         self.connect('z_DEL', 'tower2.z_DEL')
         self.connect('M_DEL', 'tower2.M_DEL')
 
+        # connections to gc
+        self.connect('d', 'gc.d')
+        self.connect('t', 'gc.t')
+        self.connect('min_d_to_t', 'gc.min_d_to_t')
+        self.connect('min_taper', 'gc.min_taper')
+
+
 
         # connections to outputs
         self.connect('tower1.mass', 'mass')
@@ -1249,96 +1308,27 @@ class TowerSE(Assembly):
         self.connect('tower1.buckling', 'buckling1')
         self.connect('tower2.buckling', 'buckling2')
         self.connect('tower1.damage', 'damage')
+        self.connect('gc.weldability', 'weldability')
+        self.connect('gc.manufactuability', 'manufactuability')
 
 
 
 if __name__ == '__main__':
 
-    # # start = 4.2
-    # # stop = 6.8
-    # # num = 8
-
-    # # y, dy_dstart, dy_dstop = linspace_with_deriv(start, stop, num)
-
-
-    # # yp, blah, blah = linspace_with_deriv(start+1e-6, stop, num)
-    # # fd1 = (yp - y)/1e-6
-
-    # # yp, blah, blah = linspace_with_deriv(start, stop+1e-6, num)
-    # # fd2 = (yp - y)/1e-6
-
-    # # print dy_dstart
-    # # print fd1
-    # # print dy_dstart - fd1
-
-    # # print dy_dstop
-    # # print fd2
-    # # print dy_dstop - fd2
-
-    # # exit()
-
-    # from commonse.environment import check_gradient
-
-    # # # twd = TowerWindDrag()
-    # # twd = TowerWaveDrag()
-    # # twd.U = [0., 8.80496275, 10.11424623, 10.96861453, 11.61821801, 12.14846828, 12.59962946, 12.99412772, 13.34582791, 13.66394248, 13.95492553, 14.22348635, 14.47317364, 14.70673252, 14.92633314, 15.13372281, 15.33033057, 15.51734112, 15.69574825, 15.86639432, 16.03]
-    # # twd.z = [0., 4.38, 8.76, 13.14, 17.52, 21.9, 26.28, 30.66, 35.04, 39.42, 43.8, 48.18, 52.56, 56.94, 61.32, 65.7, 70.08, 74.46, 78.84, 83.22, 87.6]
-    # # twd.d = [6., 5.8935, 5.787, 5.6805, 5.574, 5.4675, 5.361, 5.2545, 5.148, 5.0415, 4.935, 4.8285, 4.722, 4.6155, 4.509, 4.4025, 4.296, 4.1895, 4.083, 3.9765, 3.87]
-    # # twd.beta = [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]
-    # # twd.rho = 1.225
-    # # twd.mu = 1.7934e-05
-
-    # # twd.A = 1.1*twd.U
-    # # twd.cm = 2.0
-
-    # # check_gradient(twd)
-
-    # # td = TowerDiscretization()
-    # # td.z = np.array([0.0, 43.8, 87.6])
-    # # td.d = np.array([6.0, 4.935, 3.87])
-    # # td.t = np.array([0.0351, 0.0299, 0.0247])
-    # # td.n = np.array([10, 7])
-    # # td.n_reinforced = 3
-
-    # # check_gradient(td)
-
-    # rna = RNAMass()
-    # rna.blade_mass = 15241.323
-    # rna.hub_mass = 50421.4
-    # rna.nac_mass = 221245.8
-    # rna.hub_cm = [-6.3, 0.,  3.15]
-    # rna.nac_cm = [-0.32, 0.,   2.4 ]
-    # rna.blade_I = [ 26375976., 13187988., 13187988., 0., 0., 0.]
-    # rna.hub_I = [ 127297.8, 127297.8, 127297.8, 0., 0., 0. ]
-    # rna.nac_I = [ 9908302.58, 912488.28, 1160903.54, 0., 0., 0.  ]
-    # rna.nBlades = 3
-
-    # # rna.run()
-
-    # # r1 = rna.rna_I_TT[0]
-
-    # # rna.hub_cm[1] -= 1e-6
-    # # rna.run()
-    # # r2 = rna.rna_I_TT[0]
-    # # print r1
-    # # print r2
-    # # print r2 - r1
-    # # print (r2 - r1)/1e-6
-
-    # # exit()
-
-    # check_gradient(rna)
-
-    # exit()
-
 
     from commonse.environment import PowerWind, TowerSoil
+    from math import pi
 
-    tower = Tower()
-    tower.replace('wind', PowerWind())
+    tower = TowerSE()
+
+
+    # ---- tower ------
+    tower.replace('wind1', PowerWind())
+    tower.replace('wind2', PowerWind())
+    # onshore (no waves)
     tower.replace('soil', TowerSoil())
-    tower.replace('tower', TowerWithpBEAM())
-    # tower.replace('tower', TowerWithFrame3DD())
+    tower.replace('tower1', TowerWithpBEAM())
+    tower.replace('tower2', TowerWithpBEAM())
 
     # geometry
     tower.towerHeight = 87.6
@@ -1348,57 +1338,77 @@ if __name__ == '__main__':
     tower.n = [10, 10]
     tower.n_reinforced = 3
     tower.yaw = 0.0
+    tower.tilt = 5.0
 
-    # top mass
-    # tower.top_m = 359082.653015
-    # tower.top_I = [2960437.0, 3253223.0, 3264220.0, 0.0, -18400.0, 0.0]
-    # tower.top_cm = [-1.9, 0.0, 1.75]
-    # tower.top_F = [1478579.28056464, 0., -3522600.82607833]
-    # tower.top_M = [10318177.27285694, 0., 0.]
 
-    # blades (optimized)
-    nBlades = 3
-    tower.nBlades = nBlades
-    tower.blade_mass = 15241.323
-    bladeI = 8791992.000 * nBlades
-    tower.blade_I = np.array([bladeI, bladeI/2.0, bladeI/2.0, 0.0, 0.0, 0.0])
+    # constraints
+    V_max = 80.0  # tip speed
+    D = 126.0
+    tower.min_d_to_t = 120.0
+    tower.min_taper = 0.4
+    tower.freq1p = V_max / (D/2) / (2*pi)  # convert to Hz
 
-    # hub (optimized)
+    # safety factors
+    tower.gamma_f = 1.35
+    tower.gamma_m = 1.3
+    tower.gamma_n = 1.0
+
+    # max Thrust case
+    tower.wind_Uref1 = 16.030
+    tower.rotorT1 = 1.3295e6
+    tower.rotorQ1 = 6.2829e6
+
+    # max wind speed case
+    tower.wind_Uref2 = 67.89
+    tower.rotorT2 = 1.1770e6
+    tower.rotorQ2 = 1.5730e6
+
+    # blades
+    tower.blades_mass = 3 * 15241.323
+    bladeI = 3 * 8791992.000
+    tower.blades_I = np.array([bladeI, bladeI/2.0, bladeI/2.0, 0.0, 0.0, 0.0])
+
+    # hub
     tower.hub_mass = 50421.4
     tower.hub_cm = np.array([-6.30, 0, 3.15])
     tower.hub_I = np.array([127297.8, 127297.8, 127297.8, 0.0, 0.0, 0.0])
 
-    # nacelle (optimized)
+    # nacelle
     tower.nac_mass = 221245.8
     tower.nac_cm = np.array([-0.32, 0, 2.40])
     tower.nac_I = np.array([9908302.58, 912488.28, 1160903.54, 0.0, 0.0, 0.0])
 
-    # max Thrust case
-    F1 = np.array([1.3295e6, -2.2694e4, -4.6184e6])
-    M1 = np.array([6.2829e6, -1.0477e6, 3.9029e6])
-    V1 = 16.030
-
-    tower.top_F = F1
-    tower.top_M = M1
-
-
-    # damage
-    tower.z_DEL = np.array([0.000, 1.327, 3.982, 6.636, 9.291, 11.945, 14.600, 17.255, 19.909, 22.564, 25.218, 27.873, 30.527, 33.182, 35.836, 38.491, 41.145, 43.800, 46.455, 49.109, 51.764, 54.418, 57.073, 59.727, 62.382, 65.036, 67.691, 70.345, 73.000, 75.655, 78.309, 80.964, 83.618, 86.273, 87.600])
-    tower.M_DEL = 1e3*np.array([8.2940E+003, 8.1518E+003, 7.8831E+003, 7.6099E+003, 7.3359E+003, 7.0577E+003, 6.7821E+003, 6.5119E+003, 6.2391E+003, 5.9707E+003, 5.7070E+003, 5.4500E+003, 5.2015E+003, 4.9588E+003, 4.7202E+003, 4.4884E+003, 4.2577E+003, 4.0246E+003, 3.7942E+003, 3.5664E+003, 3.3406E+003, 3.1184E+003, 2.8977E+003, 2.6811E+003, 2.4719E+003, 2.2663E+003, 2.0673E+003, 1.8769E+003, 1.7017E+003, 1.5479E+003, 1.4207E+003, 1.3304E+003, 1.2780E+003, 1.2673E+003, 1.2761E+003])
-
-
     # wind
-    tower.wind.Uref = V1
-    tower.wind.zref = towerHt
-    tower.wind.z0 = 0.0
-    tower.wind.shearExp = 0.2
-
+    towerToShaft = 2.0
+    tower.wind_zref = tower.towerHeight + towerToShaft
+    tower.wind_z0 = 0.0
+    tower.wind1.shearExp = 0.2
+    tower.wind2.shearExp = 0.2
 
     # soil
     tower.soil.rigid = 6*[True]
 
-    # tower.soil.rigid = 6*[False]
 
+    # fatigue
+    tower.z_DEL = np.array([0.000, 1.327, 3.982, 6.636, 9.291, 11.945, 14.600, 17.255, 19.909, 22.564, 25.218, 27.873, 30.527, 33.182, 35.836, 38.491, 41.145, 43.800, 46.455, 49.109, 51.764, 54.418, 57.073, 59.727, 62.382, 65.036, 67.691, 70.345, 73.000, 75.655, 78.309, 80.964, 83.618, 86.273, 87.600])
+    tower.M_DEL = 1e3*np.array([8.2940E+003, 8.1518E+003, 7.8831E+003, 7.6099E+003, 7.3359E+003, 7.0577E+003, 6.7821E+003, 6.5119E+003, 6.2391E+003, 5.9707E+003, 5.7070E+003, 5.4500E+003, 5.2015E+003, 4.9588E+003, 4.7202E+003, 4.4884E+003, 4.2577E+003, 4.0246E+003, 3.7942E+003, 3.5664E+003, 3.3406E+003, 3.1184E+003, 2.8977E+003, 2.6811E+003, 2.4719E+003, 2.2663E+003, 2.0673E+003, 1.8769E+003, 1.7017E+003, 1.5479E+003, 1.4207E+003, 1.3304E+003, 1.2780E+003, 1.2673E+003, 1.2761E+003])
+    tower.gamma_fatigue = 1.35*1.3*1.0
+    tower.life = 20.0
+    tower.m_SN = 4
+
+    # use defaults
+    # tower.wind_rho
+    # tower.wind_mu
+    # tower.g
+    # tower.E
+    # tower.G
+    # tower.rho
+    # tower.sigma_y
+
+    # onshore
+    # tower.wave_rho
+    # tower.wave_mu
+    # tower.wave_cm
 
 
     tower.run()
@@ -1407,9 +1417,12 @@ if __name__ == '__main__':
     print 'mass =', tower.mass
     print 'f1 =', tower.f1
     print 'f2 =', tower.f2
-    print 'top_deflection =', tower.top_deflection
-    print 'stress =', tower.stress
+    print 'top_deflection =', tower.top_deflection1
+    print 'top_deflection =', tower.top_deflection2
+    print 'stress =', tower.stress1
+    print 'stress =', tower.stress2
     print 'z_buckling =', tower.z_buckling
-    print 'buckling =', tower.buckling
+    print 'buckling =', tower.buckling1
+    print 'buckling =', tower.buckling2
     print 'damage =', tower.damage
 
