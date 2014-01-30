@@ -240,7 +240,7 @@ class TowerWaveDrag(Component):
     def list_deriv_vars(self):
 
         inputs = ('U', 'A', 'z', 'd')
-        outputs = ('waveLoads.Px', 'waveLoads.Py', 'waveLoads.Pz', 'waveLoads.q', 'waveLoads.z')
+        outputs = ('waveLoads.Px', 'waveLoads.Py', 'waveLoads.Pz', 'waveLoads.q', 'waveLoads.z', 'waveLoads.beta')
 
         return inputs, outputs
 
@@ -257,7 +257,7 @@ class TowerWaveDrag(Component):
         dq = np.hstack([np.diag(self.dq_dU), np.zeros((n, 3*n))])
         dz = np.hstack([zeron, zeron, np.eye(n), zeron])
 
-        J = np.vstack([dPx, dPy, dPz, dq, dz])
+        J = np.vstack([dPx, dPy, dPz, dq, dz, np.zeros((n, 4*n))])  # TODO: remove these zeros after OpenMDAO bug fix (don't need waveLoads.beta)
 
         return J
 
@@ -520,7 +520,8 @@ class RotorLoads(Component):
         # TODO: Start HERE
         # Add derivatives to the csystem transformation methods
 
-        dFx, dFy, dFz = DirectionVector(self.T, 0.0, 0.0).hubToYaw(self.tilt, derivatives=True)
+        dF = DirectionVector(self.T, 0.0, 0.0).hubToYaw(self.tilt)
+        dFx, dFy, dFz = dF.dx, dF.dy, dF.dz
 
         dtopF_dT = np.array([dFx['dx'], dFy['dx'], dFz['dx']])
         dtopF_dm = np.array([0.0, 0.0, -self.g])
@@ -528,7 +529,8 @@ class RotorLoads(Component):
         dtopF = hstack([dtopF_dT, np.zeros((3, 4)), dtopF_dm])
 
 
-        dMx, dMy, dMz = DirectionVector(self.Q, 0.0, 0.0).hubToYaw(self.tilt, derivatives=True)
+        dM = DirectionVector(self.Q, 0.0, 0.0).hubToYaw(self.tilt)
+        dMx, dMy, dMz = dM.dx, dM.dy, dM.dz
         r = DirectionVector(self.r_hub[0], self.r_hub[1], self.r_hub[2])
         dMxcross, dMycross, dMzcross = r.cross_deriv(self.saveF, 'dr', 'dF')
 

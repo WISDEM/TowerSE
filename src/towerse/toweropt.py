@@ -22,6 +22,7 @@ class TowerOpt(TowerSE):
 
 
     def configure(self):
+        super(TowerOpt, self).configure()
 
         # set optimizer
         self.replace('driver', pyOptDriver())
@@ -164,9 +165,11 @@ if __name__ == '__main__':
 
 
 
-    tower.check_gradients()
+    # tower.check_gradients()
 
     tower.run()
+
+
 
 
 
