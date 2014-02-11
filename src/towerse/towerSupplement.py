@@ -94,8 +94,50 @@ def fatigue(M_DEL, N_DEL, d, t, m=4, DC=80.0, eta=1.265, stress_factor=1.0, weld
     return damage
 
 
+def vonMisesStressMargin(axial_stress, hoop_stress, shear_stress, gamma, sigma_y):
+    """combine stress for von Mises"""
+
+    # von mises stress
+    a = ((axial_stress + hoop_stress)/2.0)**2
+    b = ((axial_stress - hoop_stress)/2.0)**2
+    c = shear_stress**2
+    von_mises = np.sqrt(a + 3.0*(b+c))
+
+    # stress margin
+    stress_margin = gamma * von_mises / sigma_y - 1
+
+    return stress_margin
 
 
+
+def hoopStressEurocode(windLoads, waveLoads, z, d, t, z_reinforced):
+    """default method for computing hoop stress using Eurocode method"""
+
+    r = d/2.0
+    reinforcement_length =z_reinforced[1] -z_reinforced[0]
+
+    C_theta = 1.5
+    omega = reinforcement_length/np.sqrt(r*t)
+    k_w = 0.46*(1.0 + 0.1*np.sqrt(C_theta/omega*r/t))
+    k_w = np.maximum(0.65, np.minimum(1.0, k_w))
+    q_dyn = np.interp(z, windLoads.z, windLoads.q) + np.interp(z, waveLoads.z, waveLoads.q)
+    Peq = k_w*q_dyn
+    hoop_stress = -Peq*r/t
+
+    return hoop_stress
+
+
+
+def shellBucklingEurocode(axial_stress, hoop_stress, shear_stress, z, d, t,
+        z_reinforced, E, sigma_y, gamma_f, gamma_m, gamma_n):
+    """default method to compute shell buckling using Eurocode method"""
+
+    # buckling
+    gamma_b = gamma_m * gamma_n
+    zb, buckling = shellBuckling(z, d, t, 1, axial_stress, hoop_stress, shear_stress,
+                                 z_reinforced, E, sigma_y, gamma_f, gamma_b)
+
+    return zb, buckling
 
 
 

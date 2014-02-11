@@ -15,7 +15,7 @@ from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot
 from commonse.utilities import sind, cosd, linspace_with_deriv, interp_with_deriv, hstack, vstack
 from commonse.csystem import DirectionVector
 from commonse.environment import WindBase, WaveBase, SoilBase
-from towerSupplement import shellBuckling, fatigue
+from towerSupplement import fatigue, hoopStressEurocode, shellBucklingEurocode, vonMisesStressMargin
 from akima import Akima
 
 
@@ -492,6 +492,8 @@ class RotorLoads(Component):
     top_F = Array(iotype='out')  # in yaw-aligned
     top_M = Array(iotype='out')
 
+    missing_deriv_policy = 'assume_zero'
+
 
     def execute(self):
 
@@ -672,52 +674,52 @@ class TowerBase(Component):
         return Px, Py, Pz
 
 
-    def hoopStressEurocode(self):
-        """default method for computing hoop stress using Eurocode method"""
+    # def hoopStressEurocode(self):
+    #     """default method for computing hoop stress using Eurocode method"""
 
-        wind = self.windLoads
-        wave = self.waveLoads
-        r = self.d/2.0
-        t = self.t
+    #     wind = self.windLoads
+    #     wave = self.waveLoads
+    #     r = self.d/2.0
+    #     t = self.t
 
-        C_theta = 1.5
-        omega = (self.z_reinforced[1] - self.z_reinforced[0])/np.sqrt(r*t)
-        k_w = 0.46*(1.0 + 0.1*np.sqrt(C_theta/omega*r/t))
-        k_w = np.maximum(0.65, np.minimum(1.0, k_w))
-        q_dyn = np.interp(self.z, wind.z, wind.q) + np.interp(self.z, wave.z, wave.q)
-        Peq = k_w*q_dyn
-        hoop_stress = -Peq*r/t
+    #     C_theta = 1.5
+    #     omega = (self.z_reinforced[1] - self.z_reinforced[0])/np.sqrt(r*t)
+    #     k_w = 0.46*(1.0 + 0.1*np.sqrt(C_theta/omega*r/t))
+    #     k_w = np.maximum(0.65, np.minimum(1.0, k_w))
+    #     q_dyn = np.interp(self.z, wind.z, wind.q) + np.interp(self.z, wave.z, wave.q)
+    #     Peq = k_w*q_dyn
+    #     hoop_stress = -Peq*r/t
 
-        return hoop_stress
-
-
-    def vonMisesStressMargin(self, axial_stress, hoop_stress, shear_stress):
-        """combine stress for von Mises"""
-
-        # von mises stress
-        a = ((axial_stress + hoop_stress)/2.0)**2
-        b = ((axial_stress - hoop_stress)/2.0)**2
-        c = shear_stress**2
-        von_mises = np.sqrt(a + 3.0*(b+c))
-
-        # safety factor
-        gamma = self.gamma_f * self.gamma_m * self.gamma_n
-
-        # stress margin
-        stress_margin = gamma * von_mises / self.sigma_y - 1
-
-        return stress_margin
+    #     return hoop_stress
 
 
-    def shellBucklingEurocode(self, axial_stress, hoop_stress, shear_stress):
-        """default method to compute shell buckling using Eurocode method"""
+    # def vonMisesStressMargin(self, axial_stress, hoop_stress, shear_stress):
+    #     """combine stress for von Mises"""
 
-        # buckling
-        gamma_b = self.gamma_m * self.gamma_n
-        zb, buckling = shellBuckling(self.z, self.d, self.t, 1, axial_stress, hoop_stress, shear_stress,
-                                     self.z_reinforced, self.E, self.sigma_y, self.gamma_f, gamma_b)
+    #     # von mises stress
+    #     a = ((axial_stress + hoop_stress)/2.0)**2
+    #     b = ((axial_stress - hoop_stress)/2.0)**2
+    #     c = shear_stress**2
+    #     von_mises = np.sqrt(a + 3.0*(b+c))
 
-        return zb, buckling
+    #     # safety factor
+    #     gamma = self.gamma_f * self.gamma_m * self.gamma_n
+
+    #     # stress margin
+    #     stress_margin = gamma * von_mises / self.sigma_y - 1
+
+    #     return stress_margin
+
+
+    # def shellBucklingEurocode(self, axial_stress, hoop_stress, shear_stress):
+    #     """default method to compute shell buckling using Eurocode method"""
+
+    #     # buckling
+    #     gamma_b = self.gamma_m * self.gamma_n
+    #     zb, buckling = shellBuckling(self.z, self.d, self.t, 1, axial_stress, hoop_stress, shear_stress,
+    #                                  self.z_reinforced, self.E, self.sigma_y, self.gamma_f, gamma_b)
+
+    #     return zb, buckling
 
 
     def fatigue(self):
@@ -792,17 +794,81 @@ class TowerWithpBEAM(TowerBase):
         shear_stress = 2 * Vx / A
 
         # hoop_stress (Eurocode method)
-        hoop_stress = self.hoopStressEurocode()
+        hoop_stress = hoopStressEurocode(self.windLoads, self.waveLoads, z, d, t, self.z_reinforced)
 
         # von mises stress
-        self.stress = self.vonMisesStressMargin(axial_stress, hoop_stress, shear_stress)
+        self.stress = vonMisesStressMargin(axial_stress, hoop_stress, shear_stress,
+            self.gamma_f*self.gamma_m*self.gamma_n, self.sigma_y)
 
         # buckling
-        self.z_buckling, self.buckling = self.shellBucklingEurocode(axial_stress, hoop_stress, shear_stress)
+        self.z_buckling, self.buckling = shellBucklingEurocode(axial_stress, hoop_stress, shear_stress,
+            z, d, t, self.z_reinforced, self.E, self.sigma_y, self.gamma_f,
+            self.gamma_m, self.gamma_n)
 
         # fatigue
         self.damage = self.fatigue()
 
+
+    # def list_deriv_vars(self):
+
+    #     inputs = ('z', 'd', 't')
+    #     outputs = ('mass',)
+
+    #     return inputs, outputs
+
+
+    # def provideJ(self):
+
+    #     # m = 0.0
+    #     # for i in range(nodes - 1):
+    #     #     m += (z[i+1]-z[i]) * (1.0/3*(d[i]*t[i] + d[i+1]*t[i+1]) + 1.0/6*(d[i]*t[i+1] + d[i+1]*t[i]))
+    #     # m *= self.rho * pi
+
+    #     z = self.z
+    #     d = self.d
+    #     t = self.t
+
+    #     n = len(z)
+    #     dmass_dz = np.zeros(n)
+    #     dmass_dd = np.zeros(n)
+    #     dmass_dt = np.zeros(n)
+
+    #     for i in range(n - 1):
+    #         factor = 1.0/3*(d[i]*t[i] + d[i+1]*t[i+1]) + 1.0/6*(d[i]*t[i+1] + d[i+1]*t[i])
+    #         dmass_dz[i] = -factor
+    #         dmass_dz[i+1] = factor
+    #         dmass_dd[i] = (z[i+1]-z[i]) * (1.0/3*t[i] + 1.0/6*t[i+1])
+    #         dmass_dd[i+1] = (z[i+1]-z[i]) * (1.0/3*t[i+1] + 1.0/6*t[i])
+    #         dmass_dt[i] = (z[i+1]-z[i]) * (1.0/3*d[i] + 1.0/6*d[i+1])
+    #         dmass_dt[i+1] = (z[i+1]-z[i]) * (1.0/3*d[i+1] + 1.0/6*d[i])
+
+    #     dmass = self.rho * pi * hstack([dmass_dz, dmass_dd, dmass_dt])
+
+
+    #     # Vx = np.zeros(nodes)
+    #     # Vy = np.zeros(nodes)
+    #     # Fz = np.zeros(nodes)
+    #     # Mx = np.zeros(nodes)
+    #     # My = np.zeros(nodes)
+    #     # Tz = np.zeros(nodes)
+    #     # Vx[-1] = self.top_F[0]
+    #     # Vy[-1] = self.top_F[1]
+    #     # Fz[-1] = self.top_F[2]
+    #     # Mx[-1] = self.top_M[0]
+    #     # My[-1] = self.top_M[1]
+    #     # Tz[-1] = self.top_M[2]
+    #     # for i in reversed(range(nodes-1)):
+    #     #     Vx[i] = Vx[i+1] + 0.5*(Px[i] + Px[i+1])*(z[i+1]-z[i])
+    #     #     Vy[i] = Vy[i+1] + 0.5*(Py[i] + Py[i+1])*(z[i+1]-z[i])
+    #     #     Fz[i] = Fz[i+1] + 0.5*(Pz[i] + Pz[i+1])*(z[i+1]-z[i])
+
+    #     #     Mx[i] = Mx[i+1] + Vy[i+1]*(z[i+1]-z[i]) + (Py[i]/6.0 + Py[i+1]/3.0)*(z[i+1]-z[i])**2
+    #     #     My[i] = My[i+1] + Vx[i+1]*(z[i+1]-z[i]) + (Px[i]/6.0 + Px[i+1]/3.0)*(z[i+1]-z[i])**2
+    #     #     Tz[i] = Tz[i+1]
+
+    #     J = vstack([dmass])
+
+    #     return J
 
 
 class TowerWithFrame3DD(TowerBase):
@@ -1003,13 +1069,16 @@ class TowerWithFrame3DD(TowerBase):
         shear_stress = 2 * Vx / A
 
         # hoop_stress (Eurocode method)
-        hoop_stress = self.hoopStressEurocode()
+        hoop_stress = hoopStressEurocode(self.windLoads, self.waveLoads,
+            self.z, self.d, self.t, self.z_reinforced)
 
         # von mises stress
-        self.stress = self.vonMisesStressMargin(axial_stress, hoop_stress, shear_stress)
+        self.stress = vonMisesStressMargin(axial_stress, hoop_stress, shear_stress,
+            self.gamma_f*self.gamma_m*self.gamma_n, self.sigma_y)
 
         # buckling
-        self.z_buckling, self.buckling = self.shellBucklingEurocode(axial_stress, hoop_stress, shear_stress)
+        self.z_buckling, self.buckling = shellBucklingEurocode(axial_stress, hoop_stress, shear_stress, z, d, t,
+            self.z_reinforced, self.E, self.sigma_y, self.gamma_f, self.gamma_m, self.gamma_n)
 
         # fatigue
         self.damage = self.fatigue()
@@ -1038,18 +1107,18 @@ class TowerSE(Assembly):
     # environment
     wind_rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
     wind_mu = Float(1.7934e-5, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of air')
-
     wind_Uref1 = Float(iotype='in', units='m/s', desc='reference wind speed (usually at hub height)')
     wind_Uref2 = Float(iotype='in', units='m/s', desc='reference wind speed (usually at hub height)')
     wind_zref = Float(iotype='in', units='m', desc='corresponding reference height')
     wind_z0 = Float(0.0, iotype='in', units='m', desc='bottom of wind profile (height of ground/sea)')
-
 
     wave_rho = Float(1027.0, iotype='in', units='kg/m**3', desc='water density')
     wave_mu = Float(1.3351e-3, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of water')
     wave_cm = Float(2.0, iotype='in', desc='mass coefficient')
 
     g = Float(9.81, iotype='in', units='m/s**2')
+
+    # constraint parameters
     min_d_to_t = Float(120.0, iotype='in')
     min_taper = Float(0.4, iotype='in')
 
