@@ -37,7 +37,7 @@ class TowerOpt(TowerSE):
         #     self.driver.options["Old basis file"] = 10
 
         # Objective
-        self.driver.add_objective('mass / 300000')
+        self.driver.add_objective('tower1.mass / 300000')
 
         # Design Variables
         self.z = np.zeros(3)
@@ -51,14 +51,14 @@ class TowerOpt(TowerSE):
         self.driver.recorders = [DumpCaseRecorder()]
 
         # Constraints
-        self.driver.add_constraint('stress1 <= 0.0')
-        self.driver.add_constraint('stress2 <= 0.0')
-        self.driver.add_constraint('buckling1 <= 0.0')
-        self.driver.add_constraint('buckling2 <= 0.0')
-        self.driver.add_constraint('damage <= 1.0')
-        self.driver.add_constraint('weldability <= 0.0')
-        self.driver.add_constraint('manufactuability <= 0.0')
-        self.driver.add_constraint('f1 >= 1.1*freq1p')
+        self.driver.add_constraint('tower1.stress <= 0.0')
+        self.driver.add_constraint('tower2.stress <= 0.0')
+        self.driver.add_constraint('tower1.buckling <= 0.0')
+        self.driver.add_constraint('tower2.buckling <= 0.0')
+        self.driver.add_constraint('tower1.damage <= 1.0')
+        self.driver.add_constraint('gc.weldability <= 0.0')
+        self.driver.add_constraint('gc.manufactuability <= 0.0')
+        self.driver.add_constraint('tower1.f1 >= 1.1*freq1p')
 
 
 
@@ -82,6 +82,12 @@ if __name__ == '__main__':
     tower.replace('soil', TowerSoil())
     tower.replace('tower1', TowerWithpBEAM())
     tower.replace('tower2', TowerWithpBEAM())
+
+    tower.wind1.missing_deriv_policy = 'assume_zero'  # TODO: remove these later after OpenMDAO fixes this issue
+    tower.wind2.missing_deriv_policy = 'assume_zero'
+    tower.soil.missing_deriv_policy = 'assume_zero'
+    tower.tower1.missing_deriv_policy = 'assume_zero'
+    tower.tower2.missing_deriv_policy = 'assume_zero'
 
     # geometry
     tower.towerHeight = 87.6
@@ -165,7 +171,11 @@ if __name__ == '__main__':
 
 
 
-    # tower.check_gradients()
+    # tower.check_gradient('driver')
+
+    # tower.driver.gradient_options.force_fd = True
+    tower.driver.gradient_options.fd_step_type = 'relative'
+
 
     tower.run()
 
