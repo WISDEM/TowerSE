@@ -272,12 +272,16 @@ class TowerDiscretization(Component):
 
     # variables
     towerHeight = Float(iotype='in', units='m')
+    monopileHeight = Float(0.0, iotype='in', units='m')
     z = Array(iotype='in', desc='locations along unit tower, linear lofting between')
     d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
     t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
+    d_monopile = Float(iotype='in', units='m')
+    t_monopile = Float(iotype='in', units='m')
 
     # parameters
     n = Array(iotype='in', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
+    n_monopile = Int(iotype='in', desc='must be a minimum of 1 (top and bottom)')
     n_reinforced = Int(iotype='in', desc='must be a minimum of 1 (top and bottom)')
 
     # out
@@ -334,6 +338,17 @@ class TowerDiscretization(Component):
         self.z_reinforced *= towerHt
         self.dznode_dz *= towerHt
         self.dzr_dz *= towerHt
+
+        # TODO: redo gradients for monopile
+        if self.monopileHeight > 0:
+            z_monopile = np.linspace(self.z[0] - self.monopileHeight, self.z[0], self.n_monopile)
+            d_monopile = self.d_monopile * np.ones_like(z_monopile)
+            t_monopile = self.t_monopile * np.ones_like(z_monopile)
+
+            self.z_node = np.concatenate([z_monopile[:-1], self.z_node])
+            self.d_node = np.concatenate([d_monopile[:-1], self.d_node])
+            self.t_node = np.concatenate([t_monopile[:-1], self.t_node])
+            self.z_reinforced = np.concatenate([[z_monopile[0]], self.z_reinforced])
 
 
     def list_deriv_vars(self):
@@ -725,11 +740,20 @@ class TowerBase(Component):
     def fatigue(self):
         """compute damage from provided damage equivalent moments"""
 
-        # fatigue
-        N_DEL = [365*24*3600*self.life]*len(self.z)
-        M_DEL = np.interp(self.z, self.z_DEL, self.M_DEL)
+        # TODO: temporary hack to extract tower portion
+        idx = self.z >= 0
+        z = self.z[idx]
+        d = self.d[idx]
+        t = self.t[idx]
 
-        damage = fatigue(M_DEL, N_DEL, self.d, self.t, self.m_SN, self.DC, self.gamma_fatigue, stress_factor=1.0, weld_factor=True)
+        # fatigue
+        N_DEL = [365*24*3600*self.life]*len(z)
+        M_DEL = np.interp(z, self.z_DEL, self.M_DEL)
+
+        damage = fatigue(M_DEL, N_DEL, d, t, self.m_SN, self.DC, self.gamma_fatigue, stress_factor=1.0, weld_factor=True)
+
+        # TODO: more hack
+        damage = np.concatenate([np.zeros(len(self.z)-len(z)), damage])
 
         return damage
 
@@ -792,6 +816,9 @@ class TowerWithpBEAM(TowerBase):
         Vx, Vy, Fz, Mx, My, Tz = tower.shearAndBending()
         A = math.pi * d * t
         shear_stress = 2 * Vx / A
+
+        # I = math.pi * d/2.0 * t**3
+        # axial_stress2 = -My*d/2.0/I - Fz/A
 
         # hoop_stress (Eurocode method)
         hoop_stress = hoopStressEurocode(self.windLoads, self.waveLoads, z, d, t, self.z_reinforced)
@@ -1096,11 +1123,15 @@ class TowerSE(Assembly):
 
     # geometry
     towerHeight = Float(iotype='in', units='m')
+    monopileHeight = Float(0.0, iotype='in', units='m')
+    d_monopile = Float(iotype='in', units='m')
+    t_monopile = Float(iotype='in', units='m')
     z = Array(iotype='in', desc='locations along unit tower, linear lofting between')
     d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
     t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
     n = Array(iotype='in', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
     n_reinforced = Int(iotype='in', desc='must be a minimum of 1 (top and bottom)')
+    n_monopile = Int(iotype='in', desc='must be a minimum of 1 (top and bottom)')
     yaw = Float(0.0, iotype='in', units='deg')
     tilt = Float(0.0, iotype='in', units='deg')
 
@@ -1213,11 +1244,15 @@ class TowerSE(Assembly):
 
         # connections to geometry
         self.connect('towerHeight', 'geometry.towerHeight')
+        self.connect('monopileHeight', 'geometry.monopileHeight')
+        self.connect('d_monopile', 'geometry.d_monopile')
+        self.connect('t_monopile', 'geometry.t_monopile')
         self.connect('z', 'geometry.z')
         self.connect('d', 'geometry.d')
         self.connect('t', 'geometry.t')
         self.connect('n', 'geometry.n')
         self.connect('n_reinforced', 'geometry.n_reinforced')
+        self.connect('n_monopile', 'geometry.n_monopile')
 
 
         # connections to wind1
