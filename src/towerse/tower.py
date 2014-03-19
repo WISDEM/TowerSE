@@ -282,13 +282,13 @@ class TowerDiscretization(Component):
     # parameters
     n = Array(iotype='in', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
     n_monopile = Int(iotype='in', desc='must be a minimum of 1 (top and bottom)')
-    n_reinforced = Int(iotype='in', desc='must be a minimum of 1 (top and bottom)')
+    L_reinforced = Float(iotype='in', units='m')
 
     # out
     z_node = Array(iotype='out', units='m', desc='locations along tower, linear lofting between')
     d_node = Array(iotype='out', units='m', desc='tower diameter at corresponding locations')
     t_node = Array(iotype='out', units='m', desc='shell thickness at corresponding locations')
-    z_reinforced = Array(iotype='out')
+    L_reinforced_node = Array(iotype='out', units='m')
 
 
     missing_deriv_policy = 'assume_zero'
@@ -325,19 +325,22 @@ class TowerDiscretization(Component):
         self.ddnode_dz = ddnode_dz + np.dot(ddnode_dznode, self.dznode_dz)
         self.dtnode_dz = dtnode_dz + np.dot(dtnode_dznode, self.dznode_dz)
 
+        # TODO: redo gradients for L_reinforced, although it probably won't ever change
 
         # reinforcement distances
-        self.z_reinforced, dzr_dz0, dzr_dzend = linspace_with_deriv(self.z[0], self.z[-1], self.n_reinforced+1)
-        self.dzr_dz = np.zeros((len(self.z_reinforced), n2))
-        self.dzr_dz[:, 0] = dzr_dz0
-        self.dzr_dz[:, -1] = dzr_dzend
+        self.L_reinforced_node = self.L_reinforced*np.ones_like(self.z_node)
+
+        # self.z_reinforced, dzr_dz0, dzr_dzend = linspace_with_deriv(self.z[0], self.z[-1], self.n_reinforced+1)
+        # self.dzr_dz = np.zeros((len(self.z_reinforced), n2))
+        # self.dzr_dz[:, 0] = dzr_dz0
+        # self.dzr_dz[:, -1] = dzr_dzend
 
         # make dimensional
         towerHt = self.towerHeight
         self.z_node *= towerHt
-        self.z_reinforced *= towerHt
         self.dznode_dz *= towerHt
-        self.dzr_dz *= towerHt
+        # self.z_reinforced *= towerHt
+        # self.dzr_dz *= towerHt
 
         # TODO: redo gradients for monopile
         if self.monopileHeight > 0:
@@ -348,13 +351,13 @@ class TowerDiscretization(Component):
             self.z_node = np.concatenate([z_monopile[:-1], self.z_node])
             self.d_node = np.concatenate([d_monopile[:-1], self.d_node])
             self.t_node = np.concatenate([t_monopile[:-1], self.t_node])
-            self.z_reinforced = np.concatenate([[z_monopile[0]], self.z_reinforced])
+            # self.z_reinforced = np.concatenate([[z_monopile[0]], self.z_reinforced])
 
 
     def list_deriv_vars(self):
 
         inputs = ('towerHeight', 'z', 'd', 't')
-        outputs = ('z_node', 'd_node', 't_node', 'z_reinforced')
+        outputs = ('z_node', 'd_node', 't_node')  # , 'z_reinforced')
 
         return inputs, outputs
 
@@ -363,14 +366,14 @@ class TowerDiscretization(Component):
 
         n = len(self.z_node)
         m = len(self.z)
-        n2 = len(self.z_reinforced)
+        # n2 = len(self.z_reinforced)
 
         dzn = hstack([self.z_node/self.towerHeight, self.dznode_dz, np.zeros((n, 2*m))])
         ddn = hstack([np.zeros(n), self.ddnode_dz, self.ddnode_dd, np.zeros((n, m))])
         dtn = hstack([np.zeros(n), self.dtnode_dz, np.zeros((n, m)), self.dtnode_dt])
-        dzr = hstack([self.z_reinforced/self.towerHeight, self.dzr_dz, np.zeros((n2, 2*m))])
+        # dzr = hstack([self.z_reinforced/self.towerHeight, self.dzr_dz, np.zeros((n2, 2*m))])
 
-        J = np.vstack([dzn, ddn, dtn, dzr])
+        J = np.vstack([dzn, ddn, dtn])
 
         return J
 
@@ -623,7 +626,7 @@ class TowerBase(Component):
     z = Array(iotype='in', desc='locations along unit tower')
     d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
     t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
-    z_reinforced = Array(iotype='in', units='m', desc='reinforcement positions for buckling')
+    L_reinforced = Array(iotype='in', units='m', desc='reinforcement positions for buckling')
     yaw = Float(0.0, iotype='in', units='deg')
 
     # wind/wave loads
@@ -651,6 +654,7 @@ class TowerBase(Component):
     gamma_f = Float(1.35, iotype='in', desc='safety factor on loads')
     gamma_m = Float(1.1, iotype='in', desc='safety factor on materials')
     gamma_n = Float(1.0, iotype='in', desc='safety factor on consequence of failure')
+    gamma_b = Float(1.1, iotype='in', desc='buckling safety factor')
 
     life = Float(20.0, iotype='in', desc='fatigue life of tower')
     m_SN = Int(4, iotype='in', desc='slope of S/N curve')
@@ -665,7 +669,7 @@ class TowerBase(Component):
     f2 = Float(iotype='out', units='Hz', desc='second natural frequency')
     top_deflection = Float(iotype='out', units='m', desc='deflection of tower top in yaw-aligned +x direction')
     stress = Array(iotype='out', units='N/m**2', desc='von Mises stress along tower on downwind side (yaw-aligned +x).  normalized by yield stress.  includes safety factors.')
-    z_buckling = Array(iotype='out', units='m', desc='z-locations along tower where shell buckling is evaluted')
+    # z_buckling = Array(iotype='out', units='m', desc='z-locations along tower where shell buckling is evaluted')
     buckling = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
     damage = Array(iotype='out', desc='fatigue damage at each tower section')
 
@@ -821,16 +825,16 @@ class TowerWithpBEAM(TowerBase):
         # axial_stress2 = -My*d/2.0/I - Fz/A
 
         # hoop_stress (Eurocode method)
-        hoop_stress = hoopStressEurocode(self.windLoads, self.waveLoads, z, d, t, self.z_reinforced)
+        hoop_stress = hoopStressEurocode(self.windLoads, self.waveLoads, z, d, t, self.L_reinforced)
 
         # von mises stress
         self.stress = vonMisesStressMargin(axial_stress, hoop_stress, shear_stress,
             self.gamma_f*self.gamma_m*self.gamma_n, self.sigma_y)
 
         # buckling
-        self.z_buckling, self.buckling = shellBucklingEurocode(axial_stress, hoop_stress, shear_stress,
-            z, d, t, self.z_reinforced, self.E, self.sigma_y, self.gamma_f,
-            self.gamma_m, self.gamma_n)
+        self.buckling = shellBucklingEurocode(d, t, axial_stress, hoop_stress, shear_stress,
+            self.L_reinforced, self.E*np.ones(nodes), self.sigma_y*np.ones(nodes),
+            self.gamma_f, self.gamma_b)
 
         # fatigue
         self.damage = self.fatigue()
@@ -1104,8 +1108,8 @@ class TowerWithFrame3DD(TowerBase):
             self.gamma_f*self.gamma_m*self.gamma_n, self.sigma_y)
 
         # buckling
-        self.z_buckling, self.buckling = shellBucklingEurocode(axial_stress, hoop_stress, shear_stress, z, d, t,
-            self.z_reinforced, self.E, self.sigma_y, self.gamma_f, self.gamma_m, self.gamma_n)
+        self.buckling = shellBucklingEurocode(d, t, axial_stress, hoop_stress, shear_stress,
+            self.L_reinforced, self.E*np.ones(nodes), self.sigma_y*np.ones(nodes), self.gamma_f, self.gamma_b)
 
         # fatigue
         self.damage = self.fatigue()
@@ -1130,7 +1134,7 @@ class TowerSE(Assembly):
     d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
     t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
     n = Array(iotype='in', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
-    n_reinforced = Int(iotype='in', desc='must be a minimum of 1 (top and bottom)')
+    L_reinforced = Float(iotype='in', units='m')
     n_monopile = Int(iotype='in', desc='must be a minimum of 1 (top and bottom)')
     yaw = Float(0.0, iotype='in', units='deg')
     tilt = Float(0.0, iotype='in', units='deg')
@@ -1182,6 +1186,7 @@ class TowerSE(Assembly):
     gamma_f = Float(1.35, iotype='in', desc='safety factor on loads')
     gamma_m = Float(1.1, iotype='in', desc='safety factor on materials')
     gamma_n = Float(1.0, iotype='in', desc='safety factor on consequence of failure')
+    gamma_b = Float(1.1, iotype='in', desc='safety factor on consequence of failure')
 
     # fatigue parameters
     life = Float(20.0, iotype='in', desc='fatigue life of tower')
@@ -1209,7 +1214,6 @@ class TowerSE(Assembly):
     z_nodes = Array(iotype='out', units='m')
     stress1 = Array(iotype='out', units='N/m**2', desc='von Mises stress along tower on downwind side (yaw-aligned +x).  normalized by yield stress.  includes safety factors.')
     stress2 = Array(iotype='out', units='N/m**2', desc='von Mises stress along tower on downwind side (yaw-aligned +x).  normalized by yield stress.  includes safety factors.')
-    z_buckling = Array(iotype='out', units='m', desc='z-locations along tower where shell buckling is evaluted')
     buckling1 = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
     buckling2 = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
     damage = Array(iotype='out', desc='fatigue damage at each tower section')
@@ -1251,8 +1255,8 @@ class TowerSE(Assembly):
         self.connect('d', 'geometry.d')
         self.connect('t', 'geometry.t')
         self.connect('n', 'geometry.n')
-        self.connect('n_reinforced', 'geometry.n_reinforced')
         self.connect('n_monopile', 'geometry.n_monopile')
+        self.connect('L_reinforced', 'geometry.L_reinforced')
 
 
         # connections to wind1
@@ -1339,7 +1343,7 @@ class TowerSE(Assembly):
         self.connect('geometry.z_node', 'tower1.z')
         self.connect('geometry.d_node', 'tower1.d')
         self.connect('geometry.t_node', 'tower1.t')
-        self.connect('geometry.z_reinforced', 'tower1.z_reinforced')
+        self.connect('geometry.L_reinforced_node', 'tower1.L_reinforced')
         self.connect('windLoads1.windLoads', 'tower1.windLoads')
         self.connect('waveLoads1.waveLoads', 'tower1.waveLoads')
         self.connect('soil.k', 'tower1.k_soil')
@@ -1357,6 +1361,7 @@ class TowerSE(Assembly):
         self.connect('gamma_f', 'tower1.gamma_f')
         self.connect('gamma_m', 'tower1.gamma_m')
         self.connect('gamma_n', 'tower1.gamma_n')
+        self.connect('gamma_b', 'tower1.gamma_b')
         self.connect('life', 'tower1.life')
         self.connect('m_SN', 'tower1.m_SN')
         self.connect('DC', 'tower1.DC')
@@ -1368,7 +1373,7 @@ class TowerSE(Assembly):
         self.connect('geometry.z_node', 'tower2.z')
         self.connect('geometry.d_node', 'tower2.d')
         self.connect('geometry.t_node', 'tower2.t')
-        self.connect('geometry.z_reinforced', 'tower2.z_reinforced')
+        self.connect('geometry.L_reinforced_node', 'tower2.L_reinforced')
         self.connect('windLoads2.windLoads', 'tower2.windLoads')
         self.connect('waveLoads2.waveLoads', 'tower2.waveLoads')
         self.connect('soil.k', 'tower2.k_soil')
@@ -1386,6 +1391,7 @@ class TowerSE(Assembly):
         self.connect('gamma_f', 'tower2.gamma_f')
         self.connect('gamma_m', 'tower2.gamma_m')
         self.connect('gamma_n', 'tower2.gamma_n')
+        self.connect('gamma_b', 'tower2.gamma_b')
         self.connect('life', 'tower2.life')
         self.connect('m_SN', 'tower2.m_SN')
         self.connect('DC', 'tower2.DC')
@@ -1410,7 +1416,6 @@ class TowerSE(Assembly):
         self.connect('tower1.z', 'z_nodes')
         self.connect('tower1.stress', 'stress1')
         self.connect('tower2.stress', 'stress2')
-        self.connect('tower1.z_buckling', 'z_buckling')
         self.connect('tower1.buckling', 'buckling1')
         self.connect('tower2.buckling', 'buckling2')
         self.connect('tower1.damage', 'damage')

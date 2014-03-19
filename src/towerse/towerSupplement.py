@@ -9,7 +9,7 @@ Copyright (c) NREL. All rights reserved.
 
 from math import sqrt, cos, atan2, pi
 import numpy as np
-from commonse.utilities import CubicSplineSegment
+from commonse.utilities import CubicSplineSegment, cubic_spline_eval
 
 
 
@@ -110,14 +110,13 @@ def vonMisesStressMargin(axial_stress, hoop_stress, shear_stress, gamma, sigma_y
 
 
 
-def hoopStressEurocode(windLoads, waveLoads, z, d, t, z_reinforced):
+def hoopStressEurocode(windLoads, waveLoads, z, d, t, L_reinforced):
     """default method for computing hoop stress using Eurocode method"""
 
-    r = d/2.0
-    reinforcement_length =z_reinforced[1] -z_reinforced[0]
+    r = d/2.0-t/2.0
 
     C_theta = 1.5
-    omega = reinforcement_length/np.sqrt(r*t)
+    omega = L_reinforced/np.sqrt(r*t)
     k_w = 0.46*(1.0 + 0.1*np.sqrt(C_theta/omega*r/t))
     k_w = np.maximum(0.65, np.minimum(1.0, k_w))
     q_dyn = np.interp(z, windLoads.z, windLoads.q) + np.interp(z, waveLoads.z, waveLoads.q)
@@ -128,20 +127,7 @@ def hoopStressEurocode(windLoads, waveLoads, z, d, t, z_reinforced):
 
 
 
-def shellBucklingEurocode(axial_stress, hoop_stress, shear_stress, z, d, t,
-        z_reinforced, E, sigma_y, gamma_f, gamma_m, gamma_n):
-    """default method to compute shell buckling using Eurocode method"""
-
-    # buckling
-    gamma_b = gamma_m * gamma_n
-    zb, buckling = shellBuckling(z, d, t, 1, axial_stress, hoop_stress, shear_stress,
-                                 z_reinforced, E, sigma_y, gamma_f, gamma_b)
-
-    return zb, buckling
-
-
-
-def shellBuckling(z, d, t, npt, sigma_z, sigma_t, tau_zt, z_reinforced, E, sigma_y, gamma_f=1.2, gamma_b=1.1):
+def shellBucklingEurocode(d, t, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma_y, gamma_f=1.2, gamma_b=1.1):
     """
     Estimate shell buckling constraint along tower.
 
@@ -164,50 +150,30 @@ def shellBuckling(z, d, t, npt, sigma_z, sigma_t, tau_zt, z_reinforced, E, sigma
     Each constraint must be <= 0 to avoid failure.
     """
 
-    # break up into chunks of length L_reinforced
-    # z_re = np.arange(z[0], z[-1], L_reinforced)
-    # if (z_re[-1] != z[-1]):
-    #     z_re = np.r_[z_re, z[-1]]
+    n = len(d)
+    constraint = np.zeros(n)
 
-    z_re = z_reinforced
+    for i in range(n):
+        h = L_reinforced[i]
 
-    # initialize
-    constraint = np.zeros(npt * (len(z_re) - 1))
+        r1 = d[i]/2.0 - t[i]/2.0
+        r2 = d[i]/2.0 - t[i]/2.0
+        t1 = t[i]
+        t2 = t[i]
 
-    # evaluate each line separately
-    for j in range(npt):
+        sigma_z_shell = sigma_z[i]
+        sigma_t_shell = sigma_t[i]
+        tau_zt_shell = tau_zt[i]
 
-        # pull off stresses along line
-        sigma_z_line = sigma_z[j::npt]
-        sigma_t_line = sigma_t[j::npt]
-        tau_zt_line = tau_zt[j::npt]
+        # TODO: the following is non-smooth, although in general its probably OK
+        # change to magnitudes and add safety factor
+        sigma_z_shell = gamma_f*abs(sigma_z_shell)
+        sigma_t_shell = gamma_f*abs(sigma_t_shell)
+        tau_zt_shell = gamma_f*abs(tau_zt_shell)
 
-        # interpolate into sections
-        d_re = np.interp(z_re, z, d)
-        t_re = np.interp(z_re, z, t)
-        sigma_z_re = np.interp(z_re, z, sigma_z_line)
-        sigma_t_re = np.interp(z_re, z, sigma_t_line)
-        tau_zt_re = np.interp(z_re, z, tau_zt_line)
+        constraint[i] = _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z_shell, sigma_t_shell, tau_zt_shell, E[i], sigma_y[i])
 
-        for i in range(len(z_re)-1):
-            h = z_re[i+1] - z_re[i]
-            r1 = d_re[i] / 2.0
-            r2 = d_re[i+1] / 2.0
-            t1 = t_re[i]
-            t2 = t_re[i+1]
-            sigma_z_shell = sigma_z_re[i]  # use base value - should be conservative
-            sigma_t_shell = sigma_t_re[i]
-            tau_zt_shell = tau_zt_re[i]
-
-            # only compressive stresses matter.
-            # also change to magnitudes and add safety factor
-            sigma_z_shell = gamma_f*abs(min(sigma_z_shell, 0.0))
-            sigma_t_shell = gamma_f*abs(sigma_t_shell)
-            tau_zt_shell = gamma_f*abs(tau_zt_shell)
-
-            constraint[i*npt + j] = _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z_shell, sigma_t_shell, tau_zt_shell, E, sigma_y)
-
-    return z_re[0:-1], constraint
+    return constraint
 
 
 
@@ -236,8 +202,7 @@ def _cxsmooth(omega, rovert):
         fR = 1.0
         gL = 1.83/ptL1**2 - 4.14/ptL1**3
         gR = 0.0
-        cxspline = CubicSplineSegment(ptL1, ptR1, fL, fR, gL, gR)
-        Cx = cxspline.eval(omega)
+        Cx = cubic_spline_eval(ptL1, ptR1, fL, fR, gL, gR, omega)
 
     elif omega > ptR1 and omega < ptL2:
         Cx = 1.0
@@ -248,8 +213,7 @@ def _cxsmooth(omega, rovert):
         fR = 1 + 0.2/Cxb*(1-2.0*ptR2/rovert)
         gL = 0.0
         gR = -0.4/Cxb/rovert
-        cxspline = CubicSplineSegment(ptL2, ptR2, fL, fR, gL, gR)
-        Cx = cxspline(omega)
+        Cx = cubic_spline_eval(ptL2, ptR2, fL, fR, gL, gR, omega)
 
     elif omega > ptR2 and omega < ptL3:
         Cx = 1 + 0.2/Cxb*(1-2.0*omega/rovert)
@@ -260,8 +224,7 @@ def _cxsmooth(omega, rovert):
         fR = 0.6
         gL = -0.4/Cxb/rovert
         gR = 0.0
-        cxspline = CubicSplineSegment(ptL3, ptR3, fL, fR, gL, gR)
-        Cx = cxspline(omega)
+        Cx = cubic_spline_eval(ptL3, ptR3, fL, fR, gL, gR, omega)
 
     else:
         Cx = 0.6
@@ -294,7 +257,7 @@ def _sigmasmooth(omega, E, rovert):
         gL = -0.92*E*Ctheta/rovert/ptL**2
         gR = -E*(1.0/rovert)*2.03*4*(Ctheta/ptR*rovert)**3*Ctheta/ptR**2
 
-        sigma = cubicSpline(ptL, ptR, fL, fR, gL, gR, omega)
+        sigma = cubic_spline_eval(ptL, ptR, fL, fR, gL, gR, omega)
 
     else:
 
@@ -320,7 +283,7 @@ def _tausmooth(omega, rovert):
         fR = 1.0
         gL = -63.0/ptL1**4/fL
         gR = 0.0
-        C_tau = cubicSpline(ptL1, ptR1, fL, fR, gL, gR, omega)
+        C_tau = cubic_spline_eval(ptL1, ptR1, fL, fR, gL, gR, omega)
 
     elif omega > ptR1 and omega < ptL2:
         C_tau = 1.0
@@ -330,7 +293,7 @@ def _tausmooth(omega, rovert):
         fR = 1.0/3.0*sqrt(ptR2/rovert) + 1 - sqrt(8.7)/3
         gL = 0.0
         gR = 1.0/6/sqrt(ptR2*rovert)
-        C_tau = cubicSpline(ptL2, ptR2, fL, fR, gL, gR, omega)
+        C_tau = cubic_spline_eval(ptL2, ptR2, fL, fR, gL, gR, omega)
 
     else:
         C_tau = 1.0/3.0*sqrt(omega/rovert) + 1 - sqrt(8.7)/3
@@ -397,7 +360,7 @@ def _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t, tau_z
     Q = 25.0  # quality parameter - high
     lambda_z = sqrt(sigma_y/sigma_z_Rcr)
     delta_wk = 1.0/Q*sqrt(rovert)*t
-    alpha_z = 0.62/(1 + 1.91*delta_wk/t)**1.44
+    alpha_z = 0.62/(1 + 1.91*(delta_wk/t)**1.44)
 
     chi_z = _buckling_reduction_factor(alpha_z, beta_z, eta_z, lambda_z0, lambda_z)
 
@@ -509,7 +472,7 @@ def _buckling_reduction_factor(alpha, beta, eta, lambda_0, lambda_bar):
         gL = 0.0
         gR = -beta*eta*fracR**(eta-1)/(lambda_p-lambda_0)
 
-        chi = cubicSpline(ptL, ptR, fL, fR, gL, gR, lambda_bar)
+        chi = cubic_spline_eval(ptL, ptR, fL, fR, gL, gR, lambda_bar)
 
     elif lambda_bar > ptR and lambda_bar < lambda_p:
         chi = 1.0 - beta*((lambda_bar-lambda_0)/(lambda_p-lambda_0))**eta
