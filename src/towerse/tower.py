@@ -15,7 +15,8 @@ from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot
 from commonse.utilities import sind, cosd, linspace_with_deriv, interp_with_deriv, hstack, vstack
 from commonse.csystem import DirectionVector
 from commonse.environment import WindBase, WaveBase, SoilBase
-from towerSupplement import fatigue, hoopStressEurocode, shellBucklingEurocode, vonMisesStressMargin
+from towerSupplement import fatigue, hoopStressEurocode, shellBucklingEurocode, \
+    bucklingGL, vonMisesStressMargin
 from akima import Akima
 
 
@@ -347,10 +348,12 @@ class TowerDiscretization(Component):
             z_monopile = np.linspace(self.z[0] - self.monopileHeight, self.z[0], self.n_monopile)
             d_monopile = self.d_monopile * np.ones_like(z_monopile)
             t_monopile = self.t_monopile * np.ones_like(z_monopile)
+            L_monopile = self.L_reinforced * np.ones_like(z_monopile)
 
             self.z_node = np.concatenate([z_monopile[:-1], self.z_node])
             self.d_node = np.concatenate([d_monopile[:-1], self.d_node])
             self.t_node = np.concatenate([t_monopile[:-1], self.t_node])
+            self.L_reinforced_node = np.concatenate([L_monopile[:-1], self.L_reinforced_node])
             # self.z_reinforced = np.concatenate([[z_monopile[0]], self.z_reinforced])
 
 
@@ -502,6 +505,10 @@ class RotorLoads(Component):
     r_hub = Array(iotype='in', desc='position of rotor hub relative to tower top in yaw-aligned c.s.')
     m_RNA = Float(iotype='in', units='kg', desc='mass of rotor nacelle assembly')
 
+    # TODO: replace T and Q with these.  leaving T and Q in temporarily for backwards compatibility
+    F = Array(iotype='in')
+    M = Array(iotype='in')
+
     # parameters
     tilt = Float(iotype='in', units='deg')
     g = Float(9.81, iotype='in', units='m/s**2')
@@ -515,8 +522,18 @@ class RotorLoads(Component):
 
     def execute(self):
 
-        F = DirectionVector(self.T, 0.0, 0.0).hubToYaw(self.tilt)
-        M = DirectionVector(self.Q, 0.0, 0.0).hubToYaw(self.tilt)
+        if self.T != 0:
+            F = [self.T, 0.0, 0.0]
+            M = [self.Q, 0.0, 0.0]
+        else:
+            F = self.F
+            M = self.M
+
+        # F = DirectionVector(self.T, 0.0, 0.0).hubToYaw(self.tilt)
+        # M = DirectionVector(self.Q, 0.0, 0.0).hubToYaw(self.tilt)
+
+        F = DirectionVector.fromArray(F).hubToYaw(self.tilt)
+        M = DirectionVector.fromArray(M).hubToYaw(self.tilt)
 
         F.z -= self.m_RNA*self.g
 
@@ -670,7 +687,8 @@ class TowerBase(Component):
     top_deflection = Float(iotype='out', units='m', desc='deflection of tower top in yaw-aligned +x direction')
     stress = Array(iotype='out', units='N/m**2', desc='von Mises stress along tower on downwind side (yaw-aligned +x).  normalized by yield stress.  includes safety factors.')
     # z_buckling = Array(iotype='out', units='m', desc='z-locations along tower where shell buckling is evaluted')
-    buckling = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
+    shellBuckling = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
+    buckling = Array(iotype='out', desc='a global buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
     damage = Array(iotype='out', desc='fatigue damage at each tower section')
 
 
@@ -821,8 +839,8 @@ class TowerWithpBEAM(TowerBase):
         A = math.pi * d * t
         shear_stress = 2 * Vx / A
 
-        # I = math.pi * d/2.0 * t**3
-        # axial_stress2 = -My*d/2.0/I - Fz/A
+        # I = math.pi/8 * d**3 * t
+        # axial_stress2 = -My*d/2.0/I + Fz/A
 
         # hoop_stress (Eurocode method)
         hoop_stress = hoopStressEurocode(self.windLoads, self.waveLoads, z, d, t, self.L_reinforced)
@@ -832,9 +850,13 @@ class TowerWithpBEAM(TowerBase):
             self.gamma_f*self.gamma_m*self.gamma_n, self.sigma_y)
 
         # buckling
-        self.buckling = shellBucklingEurocode(d, t, axial_stress, hoop_stress, shear_stress,
+        self.shellBuckling = shellBucklingEurocode(d, t, axial_stress, hoop_stress, shear_stress,
             self.L_reinforced, self.E*np.ones(nodes), self.sigma_y*np.ones(nodes),
             self.gamma_f, self.gamma_b)
+
+        tower_height = self.z[-1] - self.z[0]
+        self.buckling = bucklingGL(d, t, Fz, My, tower_height, self.E*np.ones(nodes),
+            self.sigma_y*np.ones(nodes), self.gamma_f, self.gamma_b)
 
         # fatigue
         self.damage = self.fatigue()
@@ -1214,8 +1236,10 @@ class TowerSE(Assembly):
     z_nodes = Array(iotype='out', units='m')
     stress1 = Array(iotype='out', units='N/m**2', desc='von Mises stress along tower on downwind side (yaw-aligned +x).  normalized by yield stress.  includes safety factors.')
     stress2 = Array(iotype='out', units='N/m**2', desc='von Mises stress along tower on downwind side (yaw-aligned +x).  normalized by yield stress.  includes safety factors.')
-    buckling1 = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
-    buckling2 = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
+    shellBuckling1 = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
+    shellBuckling2 = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
+    buckling1 = Array(iotype='out', desc='a global buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
+    buckling2 = Array(iotype='out', desc='a global buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
     damage = Array(iotype='out', desc='fatigue damage at each tower section')
     weldability = Array(iotype='out')
     manufactuability = Float(iotype='out')
@@ -1418,6 +1442,8 @@ class TowerSE(Assembly):
         self.connect('tower2.stress', 'stress2')
         self.connect('tower1.buckling', 'buckling1')
         self.connect('tower2.buckling', 'buckling2')
+        self.connect('tower1.shellBuckling', 'shellBuckling1')
+        self.connect('tower2.shellBuckling', 'shellBuckling2')
         self.connect('tower1.damage', 'damage')
         self.connect('gc.weldability', 'weldability')
         self.connect('gc.manufactuability', 'manufactuability')

@@ -126,6 +126,44 @@ def hoopStressEurocode(windLoads, waveLoads, z, d, t, L_reinforced):
     return hoop_stress
 
 
+def bucklingGL(d, t, Fz, Myy, tower_height, E, sigma_y, gamma_f=1.2, gamma_b=1.1, gamma_g=1.1):
+
+    # other factors
+    alpha = 0.21  # buckling imperfection factor
+    beta = 1.0  # bending coefficient
+    sk_factor = 2.0  # fixed-free
+    tower_height = tower_height * sk_factor
+
+    # geometry
+    A = pi * d * t
+    I = pi * (d/2.0)**3 * t
+    Wp = I / (d/2.0)
+
+    # applied loads
+    Nd = -Fz * gamma_g
+    Md = Myy * gamma_f
+
+    # plastic resistance
+    Np = A * sigma_y / gamma_b
+    Mp = Wp * sigma_y / gamma_b
+
+    # factors
+    Ne = pi**2 * (E * I) / (1.1 * tower_height**2)
+    lambda_bar = np.sqrt(Np * gamma_b / Ne)
+    phi = 0.5 * (1 + alpha*(lambda_bar - 0.2) + lambda_bar**2)
+    kappa = np.ones_like(d)
+    idx = lambda_bar > 0.2
+    kappa[idx] = 1.0 / (phi[idx] + np.sqrt(phi[idx]**2 - lambda_bar[idx]**2))
+    delta_n = 0.25*kappa*lambda_bar**2
+    delta_n = np.minimum(delta_n, 0.1)
+
+    constraint = Nd/(kappa*Np) + beta*Md/Mp + delta_n - 1.0
+
+    return constraint
+
+
+
+
 
 def shellBucklingEurocode(d, t, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma_y, gamma_f=1.2, gamma_b=1.1):
     """
