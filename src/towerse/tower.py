@@ -770,7 +770,7 @@ class TowerBase(Component):
 
         # fatigue
         N_DEL = [365*24*3600*self.life]*len(z)
-        M_DEL = np.interp(z, self.z_DEL, self.M_DEL)
+        M_DEL = np.interp(z, self.towerHeight*self.z_DEL, self.M_DEL)
 
         damage = fatigue(M_DEL, N_DEL, d, t, self.m_SN, self.DC, self.gamma_fatigue, stress_factor=1.0, weld_factor=True)
 
@@ -1186,6 +1186,12 @@ class TowerSE(Assembly):
     rotorT2 = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
     rotorQ2 = Float(iotype='in', desc='torque in hub-aligned coordinate system')
 
+    # leave above for backwards compatibility for now
+    rotorF1 = Array(iotype='in', desc='forces in hub-aligned coordinate system')
+    rotorM1 = Array(iotype='in', desc='moments in hub-aligned coordinate system')
+    rotorF2 = Array(iotype='in', desc='forces in hub-aligned coordinate system')
+    rotorM2 = Array(iotype='in', desc='moments in hub-aligned coordinate system')
+
     # RNA mass properties
     blades_mass = Float(iotype='in', units='kg', desc='mass of all blade')
     hub_mass = Float(iotype='in', units='kg', desc='mass of hub')
@@ -1208,7 +1214,7 @@ class TowerSE(Assembly):
     gamma_f = Float(1.35, iotype='in', desc='safety factor on loads')
     gamma_m = Float(1.1, iotype='in', desc='safety factor on materials')
     gamma_n = Float(1.0, iotype='in', desc='safety factor on consequence of failure')
-    gamma_b = Float(1.1, iotype='in', desc='safety factor on consequence of failure')
+    gamma_b = Float(1.1, iotype='in', desc='buckling safety factor')
 
     # fatigue parameters
     life = Float(20.0, iotype='in', desc='fatigue life of tower')
@@ -1348,22 +1354,27 @@ class TowerSE(Assembly):
         self.connect('nac_I', 'rna.nac_I')
 
         # connections to rotorloads1
-        self.connect('rotorT1', 'rotorloads1.T')
-        self.connect('rotorQ1', 'rotorloads1.Q')
+        self.connect('rotorT1', 'rotorloads1.T')  # TODO: remove this later
+        self.connect('rotorQ1', 'rotorloads1.Q')  # TODO: remove this later
+        self.connect('rotorF1', 'rotorloads1.F')
+        self.connect('rotorM1', 'rotorloads1.M')
         self.connect('hub_cm', 'rotorloads1.r_hub')
         self.connect('tilt', 'rotorloads1.tilt')
         self.connect('g', 'rotorloads1.g')
         self.connect('rna.rna_mass', 'rotorloads1.m_RNA')
 
         # connections to rotorloads2
-        self.connect('rotorT2', 'rotorloads2.T')
-        self.connect('rotorQ2', 'rotorloads2.Q')
+        self.connect('rotorT2', 'rotorloads2.T')  # TODO: remove later
+        self.connect('rotorQ2', 'rotorloads2.Q')  # TODO: remove later
+        self.connect('rotorF2', 'rotorloads2.F')
+        self.connect('rotorM2', 'rotorloads2.M')
         self.connect('hub_cm', 'rotorloads2.r_hub')
         self.connect('tilt', 'rotorloads2.tilt')
         self.connect('g', 'rotorloads2.g')
         self.connect('rna.rna_mass', 'rotorloads2.m_RNA')
 
         # connections to tower
+        self.connect('towerHeight', 'tower1.towerHeight')
         self.connect('geometry.z_node', 'tower1.z')
         self.connect('geometry.d_node', 'tower1.d')
         self.connect('geometry.t_node', 'tower1.t')
@@ -1394,6 +1405,7 @@ class TowerSE(Assembly):
         self.connect('M_DEL', 'tower1.M_DEL')
 
         # connections to tower
+        self.connect('towerHeight', 'tower2.towerHeight')
         self.connect('geometry.z_node', 'tower2.z')
         self.connect('geometry.d_node', 'tower2.d')
         self.connect('geometry.t_node', 'tower2.t')
