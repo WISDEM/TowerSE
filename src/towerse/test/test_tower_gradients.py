@@ -89,6 +89,19 @@ class TestTowerDiscretization(unittest.TestCase):
         check_gradient_unit_test(self, td)
 
 
+    def test2(self):
+
+        td = TowerDiscretization()
+        td.towerHeight = np.random.rand(1)[0]
+        td.z = np.array([0.0, 0.5, 1.0])
+        td.d = np.random.rand(3)
+        td.t = np.random.rand(3)
+        td.n = np.array([10, 7])
+        td.n_reinforced = 3
+
+        check_gradient_unit_test(self, td)
+
+
 
 class TestRNAMass(unittest.TestCase):
 
@@ -105,6 +118,21 @@ class TestRNAMass(unittest.TestCase):
         rna.nac_I = [9908302.58, 912488.28, 1160903.54, 0., 0., 0.]
 
         check_gradient_unit_test(self, rna, tol=1e-5)
+
+
+    def test2(self):
+
+        rna = RNAMass()
+        rna.blades_mass = np.random.rand(1)[0]
+        rna.hub_mass = np.random.rand(1)[0]
+        rna.nac_mass = np.random.rand(1)[0]
+        rna.hub_cm = np.random.rand(3)
+        rna.nac_cm = np.random.rand(3)
+        rna.blades_I = np.random.rand(6)
+        rna.hub_I = np.random.rand(6)
+        rna.nac_I = np.random.rand(6)
+
+        check_gradient_unit_test(self, rna)
 
 
 
