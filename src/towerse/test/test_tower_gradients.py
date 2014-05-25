@@ -144,11 +144,28 @@ class TestRotorLoads(unittest.TestCase):
         loads.T = 123.0
         loads.Q = 4843.0
         loads.r_hub = [2.0, -3.2, 4.5]
+        loads.rna_cm = [-3.0, 1.6, -4.0]
         loads.m_RNA = 200.0
         loads.tilt = 13.2
         loads.g = 9.81
 
         check_gradient_unit_test(self, loads)
+
+
+    def test2(self):
+
+        loads = RotorLoads()
+        loads.T = 123.0
+        loads.Q = 4843.0
+        loads.r_hub = [2.0, -3.2, 4.5]
+        loads.rna_cm = [-3.0, 1.6, -4.0]
+        loads.m_RNA = 200.0
+        loads.tilt = 13.2
+        loads.g = 9.81
+        loads.downwind = True
+
+        check_gradient_unit_test(self, loads)
+
 
 
 

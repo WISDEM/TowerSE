@@ -10,7 +10,7 @@ Copyright (c) NREL. All rights reserved.
 import math
 import numpy as np
 from openmdao.main.api import VariableTree, Component, Assembly
-from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot
+from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot, Bool
 
 from commonse.utilities import sind, cosd, linspace_with_deriv, interp_with_deriv, hstack, vstack
 from commonse.csystem import DirectionVector
@@ -93,6 +93,7 @@ class TowerWindDrag(Component):
     beta = Array(iotype='in', units='deg', desc='corresponding wind angles relative to inertial coordinate system')
     rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
     mu = Float(1.7934e-5, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of air')
+    cd_usr = Float(iotype='in', desc='User input drag coefficient to override Reynolds number based one')
 
     # out
     windLoads = VarTree(AeroLoads(), iotype='out', desc='wind loads in inertial coordinate system')
@@ -112,8 +113,13 @@ class TowerWindDrag(Component):
         q = 0.5*rho*U**2
 
         # Reynolds number and drag
-        Re = rho*U*d/mu
-        cd, dcd_dRe = cylinderDrag(Re)
+        if self.cd_usr:
+            cd = self.cd_usr
+            Re = 1.0
+            dcd_dRe = 0.0
+        else:
+            Re = rho*U*d/mu
+            cd, dcd_dRe = cylinderDrag(Re)
         Fp = q*cd*d
 
         # components of distributed loads
@@ -182,6 +188,7 @@ class TowerWaveDrag(Component):
     rho = Float(1027.0, iotype='in', units='kg/m**3', desc='water density')
     mu = Float(1.3351e-3, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of water')
     cm = Float(2.0, iotype='in', desc='mass coefficient')
+    cd_usr = Float(iotype='in', desc='User input drag coefficient to override Reynolds number based one')
 
     # out
     waveLoads = VarTree(AeroLoads(), iotype='out', desc='wave loads in inertial coordinate system')
@@ -202,8 +209,12 @@ class TowerWaveDrag(Component):
         q = 0.5*rho*U**2
 
         # Reynolds number and drag
-        Re = rho*U*d/mu
-        cd, dcd_dRe = cylinderDrag(Re)
+        if self.cd_usr:
+            cd = self.cd_usr
+            dcd_dRe = 0.0
+        else:
+            Re = rho*U*d/mu
+            cd, dcd_dRe = cylinderDrag(Re)
 
         # inertial and drag forces
         Fi = rho*self.cm*math.pi/4.0*d**2*self.A  # Morrison's equation
@@ -504,12 +515,14 @@ class RotorLoads(Component):
     Q = Float(iotype='in', desc='torque in hub-aligned coordinate system')
     r_hub = Array(iotype='in', desc='position of rotor hub relative to tower top in yaw-aligned c.s.')
     m_RNA = Float(iotype='in', units='kg', desc='mass of rotor nacelle assembly')
+    rna_cm = Array(iotype='in', units='m', desc='location of RNA center of mass relative to tower top in yaw-aligned c.s.')
 
     # TODO: replace T and Q with these.  leaving T and Q in temporarily for backwards compatibility
     F = Array(iotype='in')
     M = Array(iotype='in')
 
     # parameters
+    downwind = Bool(False, iotype='in')
     tilt = Float(iotype='in', units='deg')
     g = Float(9.81, iotype='in', units='m/s**2')
 
@@ -529,56 +542,76 @@ class RotorLoads(Component):
             F = self.F
             M = self.M
 
-        # F = DirectionVector(self.T, 0.0, 0.0).hubToYaw(self.tilt)
-        # M = DirectionVector(self.Q, 0.0, 0.0).hubToYaw(self.tilt)
-
         F = DirectionVector.fromArray(F).hubToYaw(self.tilt)
         M = DirectionVector.fromArray(M).hubToYaw(self.tilt)
 
-        F.z -= self.m_RNA*self.g
+        # change x-direction if downwind
+        r_hub = np.copy(self.r_hub)
+        rna_cm = np.copy(self.rna_cm)
+        if self.downwind:
+            r_hub[0] *= -1
+            rna_cm[0] *= -1
+        r_hub = DirectionVector.fromArray(r_hub)
+        rna_cm = DirectionVector.fromArray(rna_cm)
+        self.save_rhub = r_hub
+        self.save_rcm = rna_cm
 
-        r = DirectionVector(self.r_hub[0], self.r_hub[1], self.r_hub[2])
+        # aerodynamic moments
+        M = M + r_hub.cross(F)
         self.saveF = F
-        M = M - r.cross(F)
 
+        # add weight loads
+        F_w = DirectionVector(0.0, 0.0, -self.m_RNA*self.g)
+        M_w = rna_cm.cross(F_w)
+        self.saveF_w = F_w
+
+        F = F + F_w
+        M = M + M_w
+
+        # put back in array
         self.top_F = np.array([F.x, F.y, F.z])
         self.top_M = np.array([M.x, M.y, M.z])
 
 
     def list_deriv_vars(self):
 
-        inputs = ('T', 'Q', 'r_hub', 'm_RNA')
+        inputs = ('T', 'Q', 'r_hub', 'm_RNA', 'rna_cm')
         outputs = ('top_F', 'top_M')
 
         return inputs, outputs
 
     def provideJ(self):
 
-        # TODO: Start HERE
-        # Add derivatives to the csystem transformation methods
-
         dF = DirectionVector(self.T, 0.0, 0.0).hubToYaw(self.tilt)
         dFx, dFy, dFz = dF.dx, dF.dy, dF.dz
 
         dtopF_dT = np.array([dFx['dx'], dFy['dx'], dFz['dx']])
-        dtopF_dm = np.array([0.0, 0.0, -self.g])
+        dtopF_w_dm = np.array([0.0, 0.0, -self.g])
 
-        dtopF = hstack([dtopF_dT, np.zeros((3, 4)), dtopF_dm])
+        dtopF = hstack([dtopF_dT, np.zeros((3, 4)), dtopF_w_dm, np.zeros((3, 3))])
 
 
         dM = DirectionVector(self.Q, 0.0, 0.0).hubToYaw(self.tilt)
         dMx, dMy, dMz = dM.dx, dM.dy, dM.dz
-        r = DirectionVector(self.r_hub[0], self.r_hub[1], self.r_hub[2])
-        dMxcross, dMycross, dMzcross = r.cross_deriv(self.saveF, 'dr', 'dF')
+        dMxcross, dMycross, dMzcross = self.save_rhub.cross_deriv(self.saveF, 'dr', 'dF')
 
         dtopM_dQ = np.array([dMx['dx'], dMy['dx'], dMz['dx']])
-        dM_dF = np.array([-dMxcross['dF'], -dMycross['dF'], -dMzcross['dF']])
+        dM_dF = np.array([dMxcross['dF'], dMycross['dF'], dMzcross['dF']])
 
         dtopM_dT = np.dot(dM_dF, dtopF_dT)
-        dtopM_dm = np.dot(dM_dF, dtopF_dm)
-        dtopM_dr = np.array([-dMxcross['dr'], -dMycross['dr'], -dMzcross['dr']])
+        dtopM_dr = np.array([dMxcross['dr'], dMycross['dr'], dMzcross['dr']])
 
-        dtopM = hstack([dtopM_dT, dtopM_dQ, dtopM_dr, dtopM_dm])
+        dMx_w_cross, dMy_w_cross, dMz_w_cross = self.save_rcm.cross_deriv(self.saveF_w, 'dr', 'dF')
+
+        dtopM_drnacm = np.array([dMx_w_cross['dr'], dMy_w_cross['dr'], dMz_w_cross['dr']])
+        dtopM_dF_w = np.array([dMx_w_cross['dF'], dMy_w_cross['dF'], dMz_w_cross['dF']])
+        dtopM_dm = np.dot(dtopM_dF_w, dtopF_w_dm)
+
+        if self.downwind:
+            dtopM_dr[:, 0] *= -1
+            dtopM_drnacm[:, 0] *= -1
+
+        dtopM = hstack([dtopM_dT, dtopM_dQ, dtopM_dr, dtopM_dm, dtopM_drnacm])
 
         J = vstack([dtopF, dtopM])
 
@@ -1160,6 +1193,7 @@ class TowerSE(Assembly):
     n_monopile = Int(iotype='in', desc='must be a minimum of 1 (top and bottom)')
     yaw = Float(0.0, iotype='in', units='deg')
     tilt = Float(0.0, iotype='in', units='deg')
+    downwind = Bool(False, iotype='in')
 
     # environment
     wind_rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
@@ -1354,21 +1388,25 @@ class TowerSE(Assembly):
         self.connect('nac_I', 'rna.nac_I')
 
         # connections to rotorloads1
+        self.connect('downwind', 'rotorloads1.downwind')
         self.connect('rotorT1', 'rotorloads1.T')  # TODO: remove this later
         self.connect('rotorQ1', 'rotorloads1.Q')  # TODO: remove this later
         self.connect('rotorF1', 'rotorloads1.F')
         self.connect('rotorM1', 'rotorloads1.M')
         self.connect('hub_cm', 'rotorloads1.r_hub')
+        self.connect('rna.rna_cm', 'rotorloads1.rna_cm')
         self.connect('tilt', 'rotorloads1.tilt')
         self.connect('g', 'rotorloads1.g')
         self.connect('rna.rna_mass', 'rotorloads1.m_RNA')
 
         # connections to rotorloads2
+        self.connect('downwind', 'rotorloads2.downwind')
         self.connect('rotorT2', 'rotorloads2.T')  # TODO: remove later
         self.connect('rotorQ2', 'rotorloads2.Q')  # TODO: remove later
         self.connect('rotorF2', 'rotorloads2.F')
         self.connect('rotorM2', 'rotorloads2.M')
         self.connect('hub_cm', 'rotorloads2.r_hub')
+        self.connect('rna.rna_cm', 'rotorloads2.rna_cm')
         self.connect('tilt', 'rotorloads2.tilt')
         self.connect('g', 'rotorloads2.g')
         self.connect('rna.rna_mass', 'rotorloads2.m_RNA')
