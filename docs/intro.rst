@@ -1,4 +1,6 @@
 Introduction
 ------------
 
-TowerSE is a systems engineering tower model for cylindrical shell wind turbine towers.  A beam finite element code, `pBEAM <https://github.com/WISDEM/pBEAM>`_ is used for the structural analysis.  Buckling is estimated using methods from Eurocode [ref] and GL [ref].  Wind speed distributions from simple power-law, log-law, or user-defined profiles, wave speed distributions come from linear wave theory.  Cylinder drag data is used for both wind and wave loading.  A textbook model is used for soil stiffness properties [ref].
+TowerSE is a systems engineering tower model for cylindrical shell wind turbine towers.  Wind, wave, soil, and structural analyses are designed to be modular.  Default implementations are provided, but all modules can be replaced with custom implementations.  Default implementations use beam finite element theory, simple wind profiles, cylinder drag theory, Eurocode and Germanischer Lloyd shell and global buckling methods, and simple fatigue estimates.
+
+TowerSE is implemented as an OpenMDAO assembly.  The beam finite element code is implemented in C++, others are in Python. All modules are linked in Python.
