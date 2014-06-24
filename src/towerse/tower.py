@@ -16,7 +16,7 @@ from commonse.utilities import sind, cosd, linspace_with_deriv, interp_with_deri
 from commonse.csystem import DirectionVector
 from commonse.environment import WindBase, WaveBase, SoilBase
 from towerSupplement import fatigue, hoopStressEurocode, shellBucklingEurocode, \
-    bucklingGL, vonMisesStressMargin
+    bucklingGL, vonMisesStressUtilization
 from akima import Akima
 
 
@@ -744,52 +744,6 @@ class TowerBase(Component):
         return Px, Py, Pz
 
 
-    # def hoopStressEurocode(self):
-    #     """default method for computing hoop stress using Eurocode method"""
-
-    #     wind = self.windLoads
-    #     wave = self.waveLoads
-    #     r = self.d/2.0
-    #     t = self.t
-
-    #     C_theta = 1.5
-    #     omega = (self.z_reinforced[1] - self.z_reinforced[0])/np.sqrt(r*t)
-    #     k_w = 0.46*(1.0 + 0.1*np.sqrt(C_theta/omega*r/t))
-    #     k_w = np.maximum(0.65, np.minimum(1.0, k_w))
-    #     q_dyn = np.interp(self.z, wind.z, wind.q) + np.interp(self.z, wave.z, wave.q)
-    #     Peq = k_w*q_dyn
-    #     hoop_stress = -Peq*r/t
-
-    #     return hoop_stress
-
-
-    # def vonMisesStressMargin(self, axial_stress, hoop_stress, shear_stress):
-    #     """combine stress for von Mises"""
-
-    #     # von mises stress
-    #     a = ((axial_stress + hoop_stress)/2.0)**2
-    #     b = ((axial_stress - hoop_stress)/2.0)**2
-    #     c = shear_stress**2
-    #     von_mises = np.sqrt(a + 3.0*(b+c))
-
-    #     # safety factor
-    #     gamma = self.gamma_f * self.gamma_m * self.gamma_n
-
-    #     # stress margin
-    #     stress_margin = gamma * von_mises / self.sigma_y - 1
-
-    #     return stress_margin
-
-
-    # def shellBucklingEurocode(self, axial_stress, hoop_stress, shear_stress):
-    #     """default method to compute shell buckling using Eurocode method"""
-
-    #     # buckling
-    #     gamma_b = self.gamma_m * self.gamma_n
-    #     zb, buckling = shellBuckling(self.z, self.d, self.t, 1, axial_stress, hoop_stress, shear_stress,
-    #                                  self.z_reinforced, self.E, self.sigma_y, self.gamma_f, gamma_b)
-
-    #     return zb, buckling
 
 
     def fatigue(self):
@@ -879,7 +833,7 @@ class TowerWithpBEAM(TowerBase):
         hoop_stress = hoopStressEurocode(self.windLoads, self.waveLoads, z, d, t, self.L_reinforced)
 
         # von mises stress
-        self.stress = vonMisesStressMargin(axial_stress, hoop_stress, shear_stress,
+        self.stress = vonMisesStressUtilization(axial_stress, hoop_stress, shear_stress,
             self.gamma_f*self.gamma_m*self.gamma_n, self.sigma_y)
 
         # buckling
@@ -1159,7 +1113,7 @@ class TowerWithFrame3DD(TowerBase):
             self.z, self.d, self.t, self.z_reinforced)
 
         # von mises stress
-        self.stress = vonMisesStressMargin(axial_stress, hoop_stress, shear_stress,
+        self.stress = vonMisesStressUtilization(axial_stress, hoop_stress, shear_stress,
             self.gamma_f*self.gamma_m*self.gamma_n, self.sigma_y)
 
         # buckling
@@ -1215,16 +1169,16 @@ class TowerSE(Assembly):
 
 
     # rotor loads
-    rotorT1 = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
-    rotorQ1 = Float(iotype='in', desc='torque in hub-aligned coordinate system')
-    rotorT2 = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
-    rotorQ2 = Float(iotype='in', desc='torque in hub-aligned coordinate system')
+    rotorT1 = Float(iotype='in', desc='thrust in hub-aligned coordinate system at rotor hub')
+    rotorQ1 = Float(iotype='in', desc='torque in hub-aligned coordinate system at rotor hub')
+    rotorT2 = Float(iotype='in', desc='thrust in hub-aligned coordinate system at rotor hub')
+    rotorQ2 = Float(iotype='in', desc='torque in hub-aligned coordinate system at rotor hub')
 
     # leave above for backwards compatibility for now
-    rotorF1 = Array(iotype='in', desc='forces in hub-aligned coordinate system')
-    rotorM1 = Array(iotype='in', desc='moments in hub-aligned coordinate system')
-    rotorF2 = Array(iotype='in', desc='forces in hub-aligned coordinate system')
-    rotorM2 = Array(iotype='in', desc='moments in hub-aligned coordinate system')
+    rotorF1 = Array(iotype='in', desc='forces in hub-aligned coordinate system at rotor hub')
+    rotorM1 = Array(iotype='in', desc='moments in hub-aligned coordinate system at rotor hub')
+    rotorF2 = Array(iotype='in', desc='forces in hub-aligned coordinate system at rotor hub')
+    rotorM2 = Array(iotype='in', desc='moments in hub-aligned coordinate system at rotor hub')
 
     # RNA mass properties
     blades_mass = Float(iotype='in', units='kg', desc='mass of all blade')
@@ -1503,85 +1457,98 @@ class TowerSE(Assembly):
 if __name__ == '__main__':
 
 
+
+
+    # --- tower setup ------
     from commonse.environment import PowerWind, TowerSoil
-    from math import pi
+    # from towerse.tower import TowerWithpBEAM
 
     tower = TowerSE()
 
-
-    # ---- tower ------
     tower.replace('wind1', PowerWind())
     tower.replace('wind2', PowerWind())
     # onshore (no waves)
     tower.replace('soil', TowerSoil())
     tower.replace('tower1', TowerWithpBEAM())
     tower.replace('tower2', TowerWithpBEAM())
+    # ---------------
 
-    # geometry
+    # --- geometry ---
     tower.towerHeight = 87.6
-    tower.z = np.array([0.0, 0.5, 1.0])
+    tower.z = [0.0, 0.5, 1.0]
     tower.d = [6.0, 4.935, 3.87]
     tower.t = [0.027*1.3, 0.023*1.3, 0.019*1.3]
     tower.n = [10, 10]
-    tower.n_reinforced = 3
+    tower.L_reinforced = 30.0
     tower.yaw = 0.0
     tower.tilt = 5.0
+    # ---------------
 
-
-    # constraints
-    V_max = 80.0  # tip speed
-    D = 126.0
-    tower.min_d_to_t = 120.0
-    tower.min_taper = 0.4
-    tower.freq1p = V_max / (D/2) / (2*pi)  # convert to Hz
-
-    # safety factors
-    tower.gamma_f = 1.35
-    tower.gamma_m = 1.3
-    tower.gamma_n = 1.0
-
-    # max Thrust case
-    tower.wind_Uref1 = 16.030
-    tower.rotorT1 = 1.3295e6
-    tower.rotorQ1 = 6.2829e6
-
-    # max wind speed case
-    tower.wind_Uref2 = 67.89
-    tower.rotorT2 = 1.1770e6
-    tower.rotorQ2 = 1.5730e6
-
-    # blades
+    # --- blades ---
     tower.blades_mass = 3 * 15241.323
     bladeI = 3 * 8791992.000
     tower.blades_I = np.array([bladeI, bladeI/2.0, bladeI/2.0, 0.0, 0.0, 0.0])
+    # ---------------
 
-    # hub
+    # --- hub ---
     tower.hub_mass = 50421.4
     tower.hub_cm = np.array([-6.30, 0, 3.15])
     tower.hub_I = np.array([127297.8, 127297.8, 127297.8, 0.0, 0.0, 0.0])
+    # ---------------
 
-    # nacelle
+    # --- nacelle ---
     tower.nac_mass = 221245.8
     tower.nac_cm = np.array([-0.32, 0, 2.40])
     tower.nac_I = np.array([9908302.58, 912488.28, 1160903.54, 0.0, 0.0, 0.0])
+    # ---------------
 
-    # wind
+    # --- wind ---
     towerToShaft = 2.0
     tower.wind_zref = tower.towerHeight + towerToShaft
     tower.wind_z0 = 0.0
     tower.wind1.shearExp = 0.2
     tower.wind2.shearExp = 0.2
+    # ---------------
 
-    # soil
+    # --- soil ---
     tower.soil.rigid = 6*[True]
+    # ---------------
 
+    # --- loading case 1: max Thrust ---
+    tower.wind_Uref1 = 16.030
+    tower.rotorF1 = [1.3295e6, 0.0, 0.0]
+    tower.rotorM1 = [6.2829e6, 0.0, 0.0]
+    # ---------------
 
-    # fatigue
-    tower.z_DEL = np.array([0.000, 1.327, 3.982, 6.636, 9.291, 11.945, 14.600, 17.255, 19.909, 22.564, 25.218, 27.873, 30.527, 33.182, 35.836, 38.491, 41.145, 43.800, 46.455, 49.109, 51.764, 54.418, 57.073, 59.727, 62.382, 65.036, 67.691, 70.345, 73.000, 75.655, 78.309, 80.964, 83.618, 86.273, 87.600])
+    # --- loading case 2: max wind speed ---
+    tower.wind_Uref2 = 67.89
+    tower.rotorF2 = [1.1770e6, 0.0, 0.0]
+    tower.rotorM2 = [1.5730e6, 0.0, 0.0]
+    # ---------------
+
+    # --- safety factors ---
+    tower.gamma_f = 1.35
+    tower.gamma_m = 1.3
+    tower.gamma_n = 1.0
+    # ---------------
+
+    # --- fatigue ---
+    tower.z_DEL = 1.0/87.6*np.array([0.000, 1.327, 3.982, 6.636, 9.291, 11.945, 14.600, 17.255, 19.909, 22.564, 25.218, 27.873, 30.527, 33.182, 35.836, 38.491, 41.145, 43.800, 46.455, 49.109, 51.764, 54.418, 57.073, 59.727, 62.382, 65.036, 67.691, 70.345, 73.000, 75.655, 78.309, 80.964, 83.618, 86.273, 87.600])
     tower.M_DEL = 1e3*np.array([8.2940E+003, 8.1518E+003, 7.8831E+003, 7.6099E+003, 7.3359E+003, 7.0577E+003, 6.7821E+003, 6.5119E+003, 6.2391E+003, 5.9707E+003, 5.7070E+003, 5.4500E+003, 5.2015E+003, 4.9588E+003, 4.7202E+003, 4.4884E+003, 4.2577E+003, 4.0246E+003, 3.7942E+003, 3.5664E+003, 3.3406E+003, 3.1184E+003, 2.8977E+003, 2.6811E+003, 2.4719E+003, 2.2663E+003, 2.0673E+003, 1.8769E+003, 1.7017E+003, 1.5479E+003, 1.4207E+003, 1.3304E+003, 1.2780E+003, 1.2673E+003, 1.2761E+003])
     tower.gamma_fatigue = 1.35*1.3*1.0
     tower.life = 20.0
     tower.m_SN = 4
+    # ---------------
+
+    # --- constraints ---
+    tower.min_d_to_t = 120.0
+    tower.min_taper = 0.4
+    # ---------------
+
+    # V_max = 80.0  # tip speed
+    # D = 126.0
+    # tower.freq1p = V_max / (D/2) / (2*pi)  # convert to Hz
+
 
     # use defaults
     # tower.wind_rho
@@ -1597,19 +1564,30 @@ if __name__ == '__main__':
     # tower.wave_mu
     # tower.wave_cm
 
-
+    # --- run ---
     tower.run()
 
+    print 'mass (kg) =', tower.mass
+    print 'f1 (Hz) =', tower.f1
+    print 'f2 (Hz) =', tower.f2
+    print 'top_deflection1 (m) =', tower.top_deflection1
+    print 'top_deflection2 (m) =', tower.top_deflection2
+    print 'weldability =', tower.weldability
+    print 'manufactuability =', tower.manufactuability
 
-    print 'mass =', tower.mass
-    print 'f1 =', tower.f1
-    print 'f2 =', tower.f2
-    print 'top_deflection =', tower.top_deflection1
-    print 'top_deflection =', tower.top_deflection2
-    print 'stress =', tower.stress1
-    print 'stress =', tower.stress2
-    print 'z_buckling =', tower.z_buckling
-    print 'buckling =', tower.buckling1
-    print 'buckling =', tower.buckling2
-    print 'damage =', tower.damage
+
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(5.0, 3.5))
+    plt.subplot2grid((3, 3), (0, 0), colspan=2, rowspan=3)
+    plt.plot(tower.stress1, tower.z_nodes, label='stress1')
+    plt.plot(tower.stress2, tower.z_nodes, label='stress1')
+    plt.plot(tower.shellBuckling1, tower.z_nodes, label='shell buckling 1')
+    plt.plot(tower.shellBuckling2, tower.z_nodes, label='shell buckling 2')
+    plt.plot(tower.buckling1, tower.z_nodes, label='global buckling 1')
+    plt.plot(tower.buckling2, tower.z_nodes, label='global buckling 2')
+    plt.plot(tower.damage, tower.z_nodes, label='damage')
+    plt.legend(bbox_to_anchor=(1.05, 1.0), loc=2)
+    plt.show()
+    # ------------
+
 

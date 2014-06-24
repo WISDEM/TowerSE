@@ -1,13 +1,22 @@
-=====================
-towerse Documentation
-=====================
+TowerSE
+=======
 
-Contents:
+.. only:: html
+
+    A systems engineering tower model for cylindrical shell wind turbine towers.
+
+    Author: `S. Andrew Ning <mailto:andrew.ning@nrel.gov>`_
+
+    .. rubric:: Table of Contents
+
 
 .. toctree::
-   :maxdepth: 2
-    
-   usage
-   srcdocs
-   pkgdocs
+    :numbered:
+    :maxdepth: 2
+
+    intro
+    installation
+    tutorial
+    documentation
+    theory
 
