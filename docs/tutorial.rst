@@ -82,7 +82,7 @@ As mentioned earlier, we are allowing for two separate loading cases.  The wind 
     :start-after: # --- loading case 2
     :end-before: # ---
 
-IEC safety factors for loading, material, and consequence of failure are defined
+Safety factors for loading, material, consequence of failure, and buckling are defined
 
 .. literalinclude:: ../src/towerse/tower.py
     :language: python
@@ -131,20 +131,3 @@ The stress, bucklng, and damage loads are shown in :num:`Figure #utilization-fig
     Utilization along tower for ultimate stress, shell buckling, global buckling, and fatigue damage.
 
 
-Referenced Environment Modules
-==============================
-.. currentmodule:: commonse.environment
-.. class:: WindBase
-.. class:: WaveBase
-.. class:: SoilBase
-.. class:: PowerWind
-.. class:: LogWind
-.. class:: LinearWaves
-.. class:: TowerSoil
-
-Referenced Tower Modules
-========================
-.. currentmodule:: towerse.tower
-.. class:: TowerBase
-.. class:: TowerWithpBEAM
-.. class:: TowerWithFrame3DD

@@ -511,15 +511,11 @@ class RNAMass(Component):
 class RotorLoads(Component):
 
     # variables
-    T = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
-    Q = Float(iotype='in', desc='torque in hub-aligned coordinate system')
+    F = Array(iotype='in', desc='forces in hub-aligned coordinate system')
+    M = Array(iotype='in', desc='moments in hub-aligned coordinate system')
     r_hub = Array(iotype='in', desc='position of rotor hub relative to tower top in yaw-aligned c.s.')
     m_RNA = Float(iotype='in', units='kg', desc='mass of rotor nacelle assembly')
     rna_cm = Array(iotype='in', units='m', desc='location of RNA center of mass relative to tower top in yaw-aligned c.s.')
-
-    # TODO: replace T and Q with these.  leaving T and Q in temporarily for backwards compatibility
-    F = Array(iotype='in')
-    M = Array(iotype='in')
 
     # parameters
     downwind = Bool(False, iotype='in')
@@ -535,12 +531,8 @@ class RotorLoads(Component):
 
     def execute(self):
 
-        if self.T != 0:
-            F = [self.T, 0.0, 0.0]
-            M = [self.Q, 0.0, 0.0]
-        else:
-            F = self.F
-            M = self.M
+        F = self.F
+        M = self.M
 
         F = DirectionVector.fromArray(F).hubToYaw(self.tilt)
         M = DirectionVector.fromArray(M).hubToYaw(self.tilt)
@@ -1169,12 +1161,6 @@ class TowerSE(Assembly):
 
 
     # rotor loads
-    rotorT1 = Float(iotype='in', desc='thrust in hub-aligned coordinate system at rotor hub')
-    rotorQ1 = Float(iotype='in', desc='torque in hub-aligned coordinate system at rotor hub')
-    rotorT2 = Float(iotype='in', desc='thrust in hub-aligned coordinate system at rotor hub')
-    rotorQ2 = Float(iotype='in', desc='torque in hub-aligned coordinate system at rotor hub')
-
-    # leave above for backwards compatibility for now
     rotorF1 = Array(iotype='in', desc='forces in hub-aligned coordinate system at rotor hub')
     rotorM1 = Array(iotype='in', desc='moments in hub-aligned coordinate system at rotor hub')
     rotorF2 = Array(iotype='in', desc='forces in hub-aligned coordinate system at rotor hub')
@@ -1343,8 +1329,6 @@ class TowerSE(Assembly):
 
         # connections to rotorloads1
         self.connect('downwind', 'rotorloads1.downwind')
-        self.connect('rotorT1', 'rotorloads1.T')  # TODO: remove this later
-        self.connect('rotorQ1', 'rotorloads1.Q')  # TODO: remove this later
         self.connect('rotorF1', 'rotorloads1.F')
         self.connect('rotorM1', 'rotorloads1.M')
         self.connect('hub_cm', 'rotorloads1.r_hub')
@@ -1355,8 +1339,6 @@ class TowerSE(Assembly):
 
         # connections to rotorloads2
         self.connect('downwind', 'rotorloads2.downwind')
-        self.connect('rotorT2', 'rotorloads2.T')  # TODO: remove later
-        self.connect('rotorQ2', 'rotorloads2.Q')  # TODO: remove later
         self.connect('rotorF2', 'rotorloads2.F')
         self.connect('rotorM2', 'rotorloads2.M')
         self.connect('hub_cm', 'rotorloads2.r_hub')
@@ -1530,6 +1512,7 @@ if __name__ == '__main__':
     tower.gamma_f = 1.35
     tower.gamma_m = 1.3
     tower.gamma_n = 1.0
+    tower.gamma_b = 1.1
     # ---------------
 
     # --- fatigue ---
