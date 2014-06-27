@@ -5,6 +5,8 @@
 Tutorial
 --------
 
+Two examples are included in this tutorial section: simulation of a land-based tower, and optimization of a land-based tower.
+
 Land-based Tower Simulation
 ===========================
 
@@ -31,7 +33,7 @@ With the tower configuration setup, we define some of the geometric parameters. 
     :height: 4in
     :align: center
 
-    Example of tower geometric parameterization (TODO: update image).
+    Example of tower geometric parameterization.
 
 .. literalinclude:: ../src/towerse/tower.py
     :language: python
@@ -129,5 +131,64 @@ The stress, bucklng, and damage loads are shown in :num:`Figure #utilization-fig
     :align: center
 
     Utilization along tower for ultimate stress, shell buckling, global buckling, and fatigue damage.
+
+
+Land-Based Tower Optimization
+=============================
+
+We begin with the same setup as the previous section, but now import additional modules for optimization.
+
+.. literalinclude:: ../src/towerse/tower.py
+    :language: python
+    :start-after: # --- optimizer imports
+    :end-before: # ---
+
+The optimizer must first be selected and configured, in this example I use SNOPT.
+
+.. literalinclude:: ../src/towerse/tower.py
+    :language: python
+    :start-after: # --- Setup Pptimizer
+    :end-before: # ---
+
+We now set the objective, and in this example it is normalized to be of order 1 for better convergence behavior.
+
+.. literalinclude:: ../src/towerse/tower.py
+    :language: python
+    :start-after: # --- Objective
+    :end-before: # ---
+
+The tower diameters, thickness, and waist location are added as design variables.
+
+.. literalinclude:: ../src/towerse/tower.py
+    :language: python
+    :start-after: # --- Design Variables
+    :end-before: # ---
+
+A recorder is added to display each iteration to the screen.
+
+.. literalinclude:: ../src/towerse/tower.py
+    :language: python
+    :start-after: # --- recorder
+    :end-before: # ---
+
+Finally, constraints are added.
+
+.. literalinclude:: ../src/towerse/tower.py
+    :language: python
+    :start-after: # --- Constraints
+    :end-before: # ---
+
+Now the optimization can be run.
+
+.. literalinclude:: ../src/towerse/tower.py
+    :language: python
+    :start-after: # --- run opt
+    :end-before: # ---
+
+
+
+
+
+
 
 

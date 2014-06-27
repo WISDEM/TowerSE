@@ -6,7 +6,8 @@ Installation
 
    C compiler, Fortran compiler, NumPy, SciPy
 
-Download either TowerSE.py-|release|.tar.gz or TowerSE.py-|release|.zip and uncompress/unpack it.
+Clone the repository at `<https://github.com/WISDEM/TowerSE>`_
+or download the releases and uncomopress/unpack (TowerSE.py-|release|.tar.gz or TowerSE.py-|release|.zip)
 
 Install TowerSE with the following command.
 
@@ -14,7 +15,17 @@ Install TowerSE with the following command.
 
    $ python setup.py install
 
-To check if installation was successful run the unit tests for the NREL 5-MW model
+To check if installation was successful try to import the module
+
+.. code-block:: bash
+
+    $ python
+
+.. code-block:: python
+
+    > import towerse.tower
+
+or run the unit tests for the gradient checks
 
 .. code-block:: bash
 
@@ -24,4 +35,4 @@ An "OK" signifies that all the tests passed.
 
 .. only:: latex
 
-    To access an HTML version of this documentation that contains further details and links to the source code, open <link>_.
+    An HTML version of this documentation that contains further details and links to the source code is available at `<http://wisdem.github.io/TowerSE>`_

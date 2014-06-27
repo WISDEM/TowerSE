@@ -1439,7 +1439,7 @@ class TowerSE(Assembly):
 if __name__ == '__main__':
 
 
-
+    optimize = True
 
     # --- tower setup ------
     from commonse.environment import PowerWind, TowerSoil
@@ -1574,3 +1574,48 @@ if __name__ == '__main__':
     # ------------
 
 
+    if optimize:
+
+        # --- optimizer imports ---
+        from pyopt_driver.pyopt_driver import pyOptDriver
+        from openmdao.lib.casehandlers.api import DumpCaseRecorder
+        # ----------------------
+
+        # --- Setup Pptimizer ---
+        tower.replace('driver', pyOptDriver())
+        tower.driver.optimizer = 'SNOPT'
+        tower.driver.options = {'Major feasibility tolerance': 1e-6,
+                               'Minor feasibility tolerance': 1e-6,
+                               'Major optimality tolerance': 1e-5,
+                               'Function precision': 1e-8}
+        # ----------------------
+
+        # --- Objective ---
+        tower.driver.add_objective('tower1.mass / 300000')
+        # ----------------------
+
+        # --- Design Variables ---
+        tower.driver.add_parameter('z[1]', low=0.25, high=0.75)
+        tower.driver.add_parameter('d[:-1]', low=3.87, high=20.0)
+        tower.driver.add_parameter('t', low=0.005, high=0.2)
+        # ----------------------
+
+        # --- recorder ---
+        tower.recorders = [DumpCaseRecorder()]
+        # ----------------------
+
+        # --- Constraints ---
+        tower.driver.add_constraint('tower1.stress <= 1.0')
+        tower.driver.add_constraint('tower2.stress <= 1.0')
+        tower.driver.add_constraint('tower1.buckling <= 1.0')
+        tower.driver.add_constraint('tower2.buckling <= 1.0')
+        tower.driver.add_constraint('tower1.damage <= 1.0')
+        tower.driver.add_constraint('gc.weldability <= 0.0')
+        tower.driver.add_constraint('gc.manufactuability <= 0.0')
+        freq1p = 0.2  # 1P freq in Hz
+        tower.driver.add_constraint('tower1.f1 >= 1.1*%f' % freq1p)
+        # ----------------------
+
+        # --- run opt ---
+        tower.run()
+        # ---------------
