@@ -21,10 +21,14 @@ or if in an activated OpenMDAO environment
 
 ## Run Unit Tests
 
-To check if installation was successful, run the unit tests
+To check if installation was successful try to import the module
 
-    $ python test/test_ccblade.py
-    $ python test/test_gradients.py
+    $ python
+    > import towerse.tower
+
+You may also run the unit tests.
+
+    $ python src/towerse/test/test_gradients.py
 
 ## Detailed Documentation
 
