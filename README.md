@@ -1,30 +1,31 @@
 # TowerSE
 
+A systems engineering model of cylindrical shell wind turbine towers.  The analysis uses beam finite element theory, cylinder drag data, linear wave theory, and shell/global buckling methods from wind turbine standards.  The module is developed as an OpenMDAO assembly.
 
-Systems Engineering Model of Wind Turbine Towers (OpenMDAO plugin)
+Author: [S. Andrew Ning](mailto:andrew.ning@nrel.gov)
 
-To install (for development purposes, the packaged version does all these steps for you):
+## Prerequisites
 
-1) activate OpenMDAO
+Fortran compiler, C compiler, NumPy, SciPy
 
-    source openmdao/bin/activate
+## Installation
 
-2) install CommonSE 
-    
-    git clone https://github.nrel.gov/sning/CommonSE
-    cd CommonSE
-    plugin install
+Install TowerSE with the following command.
 
-3) install pBEAM (requires C compiler and Boost)
+    $ python setup.py install
 
-    plugin install -f https://github.com/NREL-WISDEM/pBEAM/tarball/master#egg=pBEAM-0.1.0 pBEAM
+or if in an activated OpenMDAO environment
 
-4) install TowerSE
-    
-    git clone https://github.nrel.gov/sning/TowerSE
-    cd TowerSE
-    plugin install
+    $ plugin install
 
-## Documentation
 
-http://wisdem.github.io/TowerSE/
+## Run Unit Tests
+
+To check if installation was successful, run the unit tests
+
+    $ python test/test_ccblade.py
+    $ python test/test_gradients.py
+
+## Detailed Documentation
+
+Online documentation is available at <http://wisdem.github.io/TowerSE/>

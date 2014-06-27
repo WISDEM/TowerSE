@@ -1,3 +1,5 @@
-graft src/towerse/sphinx_build/html
-recursive-include src/towerse/test *.py
-
+include README.md
+include CHANGELOG.md
+include LICENSE.txt
+graft src/towerse/test
+global-exclude openmdao_log.txt
