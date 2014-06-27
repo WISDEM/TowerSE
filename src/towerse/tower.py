@@ -567,30 +567,39 @@ class RotorLoads(Component):
 
     def list_deriv_vars(self):
 
-        inputs = ('T', 'Q', 'r_hub', 'm_RNA', 'rna_cm')
+        inputs = ('F', 'M', 'r_hub', 'm_RNA', 'rna_cm')
         outputs = ('top_F', 'top_M')
 
         return inputs, outputs
 
     def provideJ(self):
 
-        dF = DirectionVector(self.T, 0.0, 0.0).hubToYaw(self.tilt)
+        dF = DirectionVector.fromArray(self.F).hubToYaw(self.tilt)
         dFx, dFy, dFz = dF.dx, dF.dy, dF.dz
 
-        dtopF_dT = np.array([dFx['dx'], dFy['dx'], dFz['dx']])
+        dtopF_dFx = np.array([dFx['dx'], dFy['dx'], dFz['dx']])
+        dtopF_dFy = np.array([dFx['dy'], dFy['dy'], dFz['dy']])
+        dtopF_dFz = np.array([dFx['dz'], dFy['dz'], dFz['dz']])
+        dtopF_dF = hstack([dtopF_dFx, dtopF_dFy, dtopF_dFz])
         dtopF_w_dm = np.array([0.0, 0.0, -self.g])
 
-        dtopF = hstack([dtopF_dT, np.zeros((3, 4)), dtopF_w_dm, np.zeros((3, 3))])
+        dtopF = hstack([dtopF_dF, np.zeros((3, 6)), dtopF_w_dm, np.zeros((3, 3))])
 
 
-        dM = DirectionVector(self.Q, 0.0, 0.0).hubToYaw(self.tilt)
+        dM = DirectionVector.fromArray(self.M).hubToYaw(self.tilt)
         dMx, dMy, dMz = dM.dx, dM.dy, dM.dz
         dMxcross, dMycross, dMzcross = self.save_rhub.cross_deriv(self.saveF, 'dr', 'dF')
 
-        dtopM_dQ = np.array([dMx['dx'], dMy['dx'], dMz['dx']])
+        dtopM_dMx = np.array([dMx['dx'], dMy['dx'], dMz['dx']])
+        dtopM_dMy = np.array([dMx['dy'], dMy['dy'], dMz['dy']])
+        dtopM_dMz = np.array([dMx['dz'], dMy['dz'], dMz['dz']])
+        dtopM_dM = hstack([dtopM_dMx, dtopM_dMy, dtopM_dMz])
         dM_dF = np.array([dMxcross['dF'], dMycross['dF'], dMzcross['dF']])
 
-        dtopM_dT = np.dot(dM_dF, dtopF_dT)
+        dtopM_dFx = np.dot(dM_dF, dtopF_dFx)
+        dtopM_dFy = np.dot(dM_dF, dtopF_dFy)
+        dtopM_dFz = np.dot(dM_dF, dtopF_dFz)
+        dtopM_dF = hstack([dtopM_dFx, dtopM_dFy, dtopM_dFz])
         dtopM_dr = np.array([dMxcross['dr'], dMycross['dr'], dMzcross['dr']])
 
         dMx_w_cross, dMy_w_cross, dMz_w_cross = self.save_rcm.cross_deriv(self.saveF_w, 'dr', 'dF')
@@ -603,7 +612,7 @@ class RotorLoads(Component):
             dtopM_dr[:, 0] *= -1
             dtopM_drnacm[:, 0] *= -1
 
-        dtopM = hstack([dtopM_dT, dtopM_dQ, dtopM_dr, dtopM_dm, dtopM_drnacm])
+        dtopM = hstack([dtopM_dF, dtopM_dM, dtopM_dr, dtopM_dm, dtopM_drnacm])
 
         J = vstack([dtopF, dtopM])
 
