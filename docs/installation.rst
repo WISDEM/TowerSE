@@ -29,7 +29,7 @@ or run the unit tests for the gradient checks
 
 .. code-block:: bash
 
-   $ python src/test/test_ccblade.py
+   $ python src/towerse/test/test_tower_gradients.py
 
 An "OK" signifies that all the tests passed.
 
