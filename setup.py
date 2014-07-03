@@ -13,7 +13,7 @@ setup(
     package_dir={'': 'src'},
     packages=['towerse'],
     license='Apache License, Version 2.0',
-    dependency_links=['https://github.com/NREL-WISDEM/pBEAM/tarball/master#egg=pbeam',
-        'https://github.nrel.gov/sning/CommonSE/tarball/master#egg=commonse'],
+    dependency_links=['https://github.com/WISDEM/pBEAM/tarball/master#egg=pbeam',
+        'https://github.com/WISDEM/CommonSE/tarball/master#egg=commonse'],
     zip_safe=False
 )
