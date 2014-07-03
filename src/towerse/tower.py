@@ -1170,10 +1170,10 @@ class TowerSE(Assembly):
 
 
     # rotor loads
-    rotorF1 = Array(iotype='in', desc='forces in hub-aligned coordinate system at rotor hub')
-    rotorM1 = Array(iotype='in', desc='moments in hub-aligned coordinate system at rotor hub')
-    rotorF2 = Array(iotype='in', desc='forces in hub-aligned coordinate system at rotor hub')
-    rotorM2 = Array(iotype='in', desc='moments in hub-aligned coordinate system at rotor hub')
+    rotorF1 = Array(np.zeros(3), iotype='in', desc='forces in hub-aligned coordinate system at rotor hub')
+    rotorM1 = Array(np.zeros(3), iotype='in', desc='moments in hub-aligned coordinate system at rotor hub')
+    rotorF2 = Array(np.zeros(3), iotype='in', desc='forces in hub-aligned coordinate system at rotor hub')
+    rotorM2 = Array(np.zeros(3), iotype='in', desc='moments in hub-aligned coordinate system at rotor hub')
 
     # RNA mass properties
     blades_mass = Float(iotype='in', units='kg', desc='mass of all blade')

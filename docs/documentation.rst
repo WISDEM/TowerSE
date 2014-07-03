@@ -16,7 +16,7 @@ The following inputs and outputs are defined for TowerSE:
 
 Referenced Environment Modules
 ==============================
-.. currentmodule:: commonse.environment
+.. module:: commonse.environment
 .. class:: WindBase
 .. class:: WaveBase
 .. class:: SoilBase
@@ -27,7 +27,7 @@ Referenced Environment Modules
 
 Referenced Tower Modules
 ========================
-.. currentmodule:: towerse.tower
+.. module:: towerse.tower
 .. class:: TowerBase
 .. class:: TowerWithpBEAM
 .. class:: TowerWithFrame3DD

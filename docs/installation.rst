@@ -7,7 +7,7 @@ Installation
    C compiler, Fortran compiler, NumPy, SciPy
 
 Clone the repository at `<https://github.com/WISDEM/TowerSE>`_
-or download the releases and uncomopress/unpack (TowerSE.py-|release|.tar.gz or TowerSE.py-|release|.zip)
+or download the releases and uncompress/unpack (TowerSE.py-|release|.tar.gz or TowerSE.py-|release|.zip)
 
 Install TowerSE with the following command.
 
