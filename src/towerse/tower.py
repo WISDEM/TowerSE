@@ -1136,19 +1136,19 @@ class TowerWithFrame3DD(TowerBase):
 class TowerSE(Assembly):
 
     # geometry
-    towerHeight = Float(iotype='in', units='m')
-    monopileHeight = Float(0.0, iotype='in', units='m')
-    d_monopile = Float(iotype='in', units='m')
-    t_monopile = Float(iotype='in', units='m')
+    towerHeight = Float(iotype='in', units='m', desc='height of tower')
+    monopileHeight = Float(0.0, iotype='in', units='m', desc='height of monopile (0.0 if no monopile)')
+    d_monopile = Float(iotype='in', units='m', desc='diameter of monopile')
+    t_monopile = Float(iotype='in', units='m', desc='wall thickness of monopile')
     z = Array(iotype='in', desc='locations along unit tower, linear lofting between')
     d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
     t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
     n = Array(iotype='in', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
-    L_reinforced = Float(iotype='in', units='m')
-    n_monopile = Int(iotype='in', desc='must be a minimum of 1 (top and bottom)')
-    yaw = Float(0.0, iotype='in', units='deg')
-    tilt = Float(0.0, iotype='in', units='deg')
-    downwind = Bool(False, iotype='in')
+    L_reinforced = Float(iotype='in', units='m', desc='distance along tower for reinforcements used in buckling calc')
+    n_monopile = Int(iotype='in', desc='number of finite elements in monopile, must be a minimum of 1 (top and bottom nodes)')
+    yaw = Float(0.0, iotype='in', units='deg', desc='yaw angle')
+    tilt = Float(0.0, iotype='in', units='deg', desc='tilt angle')
+    downwind = Bool(False, iotype='in', desc='flag if rotor is downwind')
 
     # environment
     wind_rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
@@ -1162,11 +1162,11 @@ class TowerSE(Assembly):
     wave_mu = Float(1.3351e-3, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of water')
     wave_cm = Float(2.0, iotype='in', desc='mass coefficient')
 
-    g = Float(9.81, iotype='in', units='m/s**2')
+    g = Float(9.81, iotype='in', units='m/s**2', desc='acceleration of gravity')
 
     # constraint parameters
-    min_d_to_t = Float(120.0, iotype='in')
-    min_taper = Float(0.4, iotype='in')
+    min_d_to_t = Float(120.0, iotype='in', desc='minimum allowable diameter to thickness ratio')
+    min_taper = Float(0.4, iotype='in', desc='minimum allowable taper ratio from tower top to tower bottom')
 
 
     # rotor loads
@@ -1176,7 +1176,7 @@ class TowerSE(Assembly):
     rotorM2 = Array(np.zeros(3), iotype='in', desc='moments in hub-aligned coordinate system at rotor hub')
 
     # RNA mass properties
-    blades_mass = Float(iotype='in', units='kg', desc='mass of all blade')
+    blades_mass = Float(iotype='in', units='kg', desc='mass of all blades')
     hub_mass = Float(iotype='in', units='kg', desc='mass of hub')
     nac_mass = Float(iotype='in', units='kg', desc='mass of nacelle')
 
@@ -1204,8 +1204,8 @@ class TowerSE(Assembly):
     m_SN = Int(4, iotype='in', desc='slope of S/N curve')
     DC = Float(80.0, iotype='in', desc='standard value of stress')
     gamma_fatigue = Float(1.755, iotype='in', desc='total safety factor for fatigue')
-    z_DEL = Array(iotype='in')
-    M_DEL = Array(iotype='in')
+    z_DEL = Array(iotype='in', desc='locations along unit tower for M_DEL')
+    M_DEL = Array(iotype='in', units='N*m', desc='damage equivalent moments along tower')
 
     # replace
     wind1 = Slot(WindBase)
@@ -1448,7 +1448,7 @@ class TowerSE(Assembly):
 if __name__ == '__main__':
 
 
-    optimize = True
+    optimize = False
 
     # --- tower setup ------
     from commonse.environment import PowerWind, TowerSoil
@@ -1572,13 +1572,15 @@ if __name__ == '__main__':
     plt.figure(figsize=(5.0, 3.5))
     plt.subplot2grid((3, 3), (0, 0), colspan=2, rowspan=3)
     plt.plot(tower.stress1, tower.z_nodes, label='stress1')
-    plt.plot(tower.stress2, tower.z_nodes, label='stress1')
+    plt.plot(tower.stress2, tower.z_nodes, label='stress2')
     plt.plot(tower.shellBuckling1, tower.z_nodes, label='shell buckling 1')
     plt.plot(tower.shellBuckling2, tower.z_nodes, label='shell buckling 2')
     plt.plot(tower.buckling1, tower.z_nodes, label='global buckling 1')
     plt.plot(tower.buckling2, tower.z_nodes, label='global buckling 2')
     plt.plot(tower.damage, tower.z_nodes, label='damage')
     plt.legend(bbox_to_anchor=(1.05, 1.0), loc=2)
+    plt.xlabel('utilization')
+    plt.ylabel('height along tower (m)')
     plt.show()
     # ------------
 
@@ -1618,6 +1620,8 @@ if __name__ == '__main__':
         tower.driver.add_constraint('tower2.stress <= 1.0')
         tower.driver.add_constraint('tower1.buckling <= 1.0')
         tower.driver.add_constraint('tower2.buckling <= 1.0')
+        tower.driver.add_constraint('tower1.shellBuckling <= 1.0')
+        tower.driver.add_constraint('tower2.shellBuckling <= 1.0')
         tower.driver.add_constraint('tower1.damage <= 1.0')
         tower.driver.add_constraint('gc.weldability <= 0.0')
         tower.driver.add_constraint('gc.manufactuability <= 0.0')
@@ -1628,3 +1632,4 @@ if __name__ == '__main__':
         # --- run opt ---
         tower.run()
         # ---------------
+
