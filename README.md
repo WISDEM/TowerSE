@@ -2,6 +2,10 @@ TowerSE is a systems engineering model of cylindrical shell wind turbine towers.
 
 Author: [S. Andrew Ning](mailto:andrew.ning@nrel.gov)
 
+## Detailed Documentation
+
+For detailed documentation see <http://wisdem.github.io/TowerSE/>
+
 ## Prerequisites
 
 Fortran compiler, C compiler, NumPy, SciPy
@@ -27,7 +31,3 @@ To check if installation was successful try to import the module
 You may also run the unit tests.
 
     $ python src/towerse/test/test_gradients.py
-
-## Detailed Documentation
-
-Online documentation is available at <http://wisdem.github.io/TowerSE/>
