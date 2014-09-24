@@ -2,6 +2,10 @@ TowerSE is a systems engineering model of cylindrical shell wind turbine towers.
 
 Author: [S. Andrew Ning](mailto:andrew.ning@nrel.gov)
 
+## Version
+
+This software is a beta version 0.1.0.
+
 ## Detailed Documentation
 
 For detailed documentation see <http://wisdem.github.io/TowerSE/>
