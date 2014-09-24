@@ -31,3 +31,5 @@ To check if installation was successful try to import the module
 You may also run the unit tests.
 
     $ python src/towerse/test/test_gradients.py
+
+For software issues please use <https://github.com/WISDEM/TowerSE/issues>.  For functionality and theory related questions and comments please use the NWTC forum for [Systems Engineering Software Questions](https://wind.nrel.gov/forum/wind/viewtopic.php?f=34&t=1002).
