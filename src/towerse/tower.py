@@ -598,14 +598,14 @@ class RotorLoads(Component):
         # F = DirectionVector(self.T, 0.0, 0.0).hubToYaw(self.tilt)
         # M = DirectionVector(self.Q, 0.0, 0.0).hubToYaw(self.tilt)
 
-        F = DirectionVector.fromArray(F).hubToYaw(self.tilt)
-        M = DirectionVector.fromArray(M).hubToYaw(self.tilt)
+        Fvec= DirectionVector.fromArray(F).hubToYaw(self.tilt)
+        Mvec= DirectionVector.fromArray(M).hubToYaw(self.tilt)
         #DEBUG
         #F = DirectionVector.fromArray(np.array([1.5*1700.e3,0.,0.])).hubToYaw(self.tilt)
         #M = DirectionVector.fromArray(np.array([0.,0.,0.])).hubToYaw(self.tilt)
 
-        r_hub = DirectionVector(self.r_hub[0], self.r_hub[1], self.r_hub[2])
-        M = M + r_hub.cross(F)
+        r_hub_vec = DirectionVector(self.r_hub[0], self.r_hub[1], self.r_hub[2])
+        Mvec = Mvec + r_hub_vec.cross(Fvec)
         #self.saveF = F
 
         # add weight loads
@@ -617,12 +617,12 @@ class RotorLoads(Component):
         r_cm = DirectionVector.fromArray(self.rna_cm)
         M_w =  r_cm.cross(F_w)
 
-        F += F_w
+        Fvec += F_w
         #          !!!!!!!!!!!!!!!!!!! WATCH !!!!!!!!!!!!!!!!!!
         #M += M_w   #REMOVE WEIGHT EFFECT TO ACCOUNT FOR P-Delta Effect
         print "!!!! No weight effect on rotor moments -TowerSE  !!!!"
-        self.top_F = np.array([F.x, F.y, F.z])
-        self.top_M = np.array([M.x, M.y, M.z])
+        self.top_F = np.array([Fvec.x, Fvec.y, Fvec.z])
+        self.top_M = np.array([Mvec.x, Mvec.y, Mvec.z])
 
 
     def list_deriv_vars(self):
@@ -1126,9 +1126,9 @@ class TowerWithFrame3DD(TowerBase):
         # tower top load  (TODO: remove RNA weight from these forces since Frame3DD accounts for it)
 
         nF = np.array([n])
-        Fx = np.array([self.top_F[0]])
-        Fy = np.array([self.top_F[1]])
-        Fz = np.array([self.top_F[2]])
+        Fx = np.array([self.top_F[0]])+self.top_m*gx
+        Fy = np.array([self.top_F[1]])+self.top_m*gy
+        Fz = np.array([self.top_F[2]])-self.top_m*gz
         Mxx = np.array([self.top_M[0]])
         Myy = np.array([self.top_M[1]])
         Mzz = np.array([self.top_M[2]])
@@ -1213,8 +1213,15 @@ class TowerWithFrame3DD(TowerBase):
         # buckling
 
         junk=np.ones(nodes.node.size)
-        self.buckling = shellBucklingEurocode(d, t, axial_stress, hoop_stress, shear_stress,
-            self.L_reinforced, self.E*junk, self.sigma_y*junk, self.gamma_f, self.gamma_b)
+        # global buckling changed d and t to self.d and self.t
+        self.shellBuckling = shellBucklingEurocode(self.d, self.t, axial_stress, hoop_stress, shear_stress,
+            self.L_reinforced, self.E*junk, self.sigma_y*junk,
+            self.gamma_f, self.gamma_b)
+
+        tower_height = self.z[-1] - self.z[0]
+        self.buckling = bucklingGL(self.d, self.t, Fz, Myy, tower_height, self.E*junk,
+            self.sigma_y*junk, self.gamma_f, self.gamma_b)
+
 
         # fatigue
         self.damage = self.fatigue()
@@ -1266,10 +1273,14 @@ class TowerSE(Assembly):
 
 
     # rotor loads
-    rotorT1 = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
-    rotorQ1 = Float(iotype='in', desc='torque in hub-aligned coordinate system')
-    rotorT2 = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
-    rotorQ2 = Float(iotype='in', desc='torque in hub-aligned coordinate system')
+##    rotorT1 = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
+##    rotorQ1 = Float(iotype='in', desc='torque in hub-aligned coordinate system')
+##    rotorT2 = Float(iotype='in', desc='thrust in hub-aligned coordinate system')
+##    rotorQ2 = Float(iotype='in', desc='torque in hub-aligned coordinate system')
+    rotorF1 = Array(iotype='in',desc='Forces in hub-aligned coordinate system')
+    rotorF2 = Array(iotype='in',desc='Forces in hub-aligned coordinate system')
+    rotorM1 = Array(iotype='in',desc='Moments in hub-aligned coordinate system')
+    rotorM2 = Array(iotype='in',desc='Moments in hub-aligned coordinate system')
 
     # RNA mass properties
     blades_mass = Float(iotype='in', units='kg', desc='mass of all blade')
@@ -1446,8 +1457,11 @@ class TowerSE(Assembly):
         self.connect('nac_I', 'rna.nac_I')
 
         # connections to rotorloads1
-        self.connect('rotorT1', 'rotorloads1.T')
-        self.connect('rotorQ1', 'rotorloads1.Q')
+        self.connect('rotorF1', 'rotorloads1.F')
+        self.connect('rotorM1', 'rotorloads1.M')
+
+        #self.connect('rotorT1', 'rotorloads1.T')
+        #self.connect('rotorQ1', 'rotorloads1.Q')
         self.connect('hub_cm', 'rotorloads1.r_hub')
         self.connect('tilt', 'rotorloads1.tilt')
         self.connect('g', 'rotorloads1.g')
@@ -1455,8 +1469,11 @@ class TowerSE(Assembly):
         self.connect('rna.rna_cm', 'rotorloads1.rna_cm')
 
         # connections to rotorloads2
-        self.connect('rotorT2', 'rotorloads2.T')
-        self.connect('rotorQ2', 'rotorloads2.Q')
+        self.connect('rotorF2', 'rotorloads2.F')
+        self.connect('rotorM2', 'rotorloads2.M')
+
+        #self.connect('rotorT2', 'rotorloads2.T')
+        #self.connect('rotorQ2', 'rotorloads2.Q')
         self.connect('hub_cm', 'rotorloads2.r_hub')
         self.connect('tilt', 'rotorloads2.tilt')
         self.connect('g', 'rotorloads2.g')
@@ -1664,7 +1681,10 @@ if __name__ == '__main__':
     print 'zs=', tower.tower1.z
     print 'ds=', tower.tower1.d
     print 'ts=', tower.tower1.t
-    print 'buckling =', tower.buckling1
-    print 'buckling =', tower.buckling2
+    print 'GL buckling =', tower.buckling1
+    print 'GL buckling =', tower.buckling2
+    print 'Shell buckling =', tower.shellBuckling1
+    print 'Shell buckling =', tower.shellBuckling2
+
     print 'damage =', tower.damage
 
