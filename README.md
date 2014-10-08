@@ -1,6 +1,6 @@
 TowerSE is a systems engineering model of cylindrical shell wind turbine towers.  The analysis uses beam finite element theory, cylinder drag data, linear wave theory, and shell/global buckling methods from wind turbine standards.  The module is developed as an OpenMDAO assembly.
 
-Author: [S. Andrew Ning](mailto:andrew.ning@nrel.gov)
+Author: [S. Andrew Ning](mailto:nrel.wisdem+towerse@gmail.com)
 
 ## Version
 
@@ -12,22 +12,33 @@ For detailed documentation see <http://wisdem.github.io/TowerSE/>
 
 ## Prerequisites
 
-Fortran compiler, C compiler, NumPy, SciPy
+General: NumPy, SciPy, Swig, pyWin32, MatlPlotLib, Lxml, OpenMDAO
+
+## Dependencies:
+
+Wind Plant Framework: [FUSED-Wind](http://fusedwind.org) (Framework for Unified Systems Engineering and Design of Wind Plants)
+
+Sub-Models: CommonSE, pBEAM
+
+Supporting python packages: Pandas, Algopy, Zope.interface, Sphinx, Xlrd, PyOpt, py2exe, Pyzmq, Sphinxcontrib-bibtex, Sphinxcontrib-zopeext, Numpydoc, Ipython
 
 ## Installation
 
-Install TowerSE with the following command.
+First, clone the [repository](https://github.com/WISDEM/TowerSE)
+or download the releases and uncompress/unpack (TowerSE.py-|release|.tar.gz or TowerSE.py-|release|.zip) from the website link at the bottom the [WISDEM site](http://nwtc.nrel.gov/WISDEM).
+
+Install TowerSE with the following command:
 
     $ python setup.py install
 
-or if in an activated OpenMDAO environment
+or if in an activated OpenMDAO environment:
 
     $ plugin install
 
 
 ## Run Unit Tests
 
-To check if installation was successful try to import the module
+To check if installation was successful try to import the module from within an activated OpenMDAO environment:
 
     $ python
     > import towerse.tower

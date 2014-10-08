@@ -5,7 +5,7 @@ TowerSE
 
     A systems engineering tower model for cylindrical shell wind turbine towers.
 
-    Author: `S. Andrew Ning <mailto:andrew.ning@nrel.gov>`_
+    Author: `S. Andrew Ning <mailto:nrel.wisdem+towerse@gmail.com>`_
 
     .. rubric:: Table of Contents
 
