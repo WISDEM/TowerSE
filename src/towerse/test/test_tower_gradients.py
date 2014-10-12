@@ -89,6 +89,19 @@ class TestTowerDiscretization(unittest.TestCase):
         check_gradient_unit_test(self, td)
 
 
+    def test2(self):
+
+        td = TowerDiscretization()
+        td.towerHeight = np.random.rand(1)[0]
+        td.z = np.array([0.0, 0.5, 1.0])
+        td.d = np.random.rand(3)
+        td.t = np.random.rand(3)
+        td.n = np.array([10, 7])
+        td.n_reinforced = 3
+
+        check_gradient_unit_test(self, td)
+
+
 
 class TestRNAMass(unittest.TestCase):
 
@@ -107,20 +120,66 @@ class TestRNAMass(unittest.TestCase):
         check_gradient_unit_test(self, rna, tol=1e-5)
 
 
+    def test2(self):
+
+        rna = RNAMass()
+        rna.blades_mass = np.random.rand(1)[0]
+        rna.hub_mass = np.random.rand(1)[0]
+        rna.nac_mass = np.random.rand(1)[0]
+        rna.hub_cm = np.random.rand(3)
+        rna.nac_cm = np.random.rand(3)
+        rna.blades_I = np.random.rand(6)
+        rna.hub_I = np.random.rand(6)
+        rna.nac_I = np.random.rand(6)
+
+        check_gradient_unit_test(self, rna)
+
+
 
 class TestRotorLoads(unittest.TestCase):
 
     def test1(self):
 
         loads = RotorLoads()
-        loads.T = 123.0
-        loads.Q = 4843.0
+        loads.F = [123.0, 0.0, 0.0]
+        loads.M = [4843.0, 0.0, 0.0]
         loads.r_hub = [2.0, -3.2, 4.5]
+        loads.rna_cm = [-3.0, 1.6, -4.0]
+        loads.m_RNA = 200.0
+        loads.tilt = 13.2
+        loads.g = 9.81
+
+        check_gradient_unit_test(self, loads, tol=2e-6)
+
+
+    def test2(self):
+
+        loads = RotorLoads()
+        loads.F = [123.0, 0.0, 0.0]
+        loads.M = [4843.0, 0.0, 0.0]
+        loads.r_hub = [2.0, -3.2, 4.5]
+        loads.rna_cm = [-3.0, 1.6, -4.0]
+        loads.m_RNA = 200.0
+        loads.tilt = 13.2
+        loads.g = 9.81
+        loads.downwind = True
+
+        check_gradient_unit_test(self, loads, tol=2e-6)
+
+
+    def test3(self):
+
+        loads = RotorLoads()
+        loads.F = [123.0, 101.0, -50.0]
+        loads.M = [4843.0, -2239.0, 1232.0]
+        loads.r_hub = [2.0, -3.2, 4.5]
+        loads.rna_cm = [-3.0, 1.6, -4.0]
         loads.m_RNA = 200.0
         loads.tilt = 13.2
         loads.g = 9.81
 
         check_gradient_unit_test(self, loads)
+
 
 
 
