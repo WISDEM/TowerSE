@@ -94,7 +94,7 @@ def fatigue(M_DEL, N_DEL, d, t, m=4, DC=80.0, eta=1.265, stress_factor=1.0, weld
     return damage
 
 
-def vonMisesStressMargin(axial_stress, hoop_stress, shear_stress, gamma, sigma_y):
+def vonMisesStressUtilization(axial_stress, hoop_stress, shear_stress, gamma, sigma_y):
     """combine stress for von Mises"""
 
     # von mises stress
@@ -104,9 +104,9 @@ def vonMisesStressMargin(axial_stress, hoop_stress, shear_stress, gamma, sigma_y
     von_mises = np.sqrt(a + 3.0*(b+c))
 
     # stress margin
-    stress_margin = gamma * von_mises / sigma_y - 1
+    stress_utilization = gamma * von_mises / sigma_y
 
-    return stress_margin
+    return stress_utilization
 
 
 
@@ -157,7 +157,7 @@ def bucklingGL(d, t, Fz, Myy, tower_height, E, sigma_y, gamma_f=1.2, gamma_b=1.1
     delta_n = 0.25*kappa*lambda_bar**2
     delta_n = np.minimum(delta_n, 0.1)
 
-    constraint = Nd/(kappa*Np) + beta*Md/Mp + delta_n - 1.0
+    constraint = Nd/(kappa*Np) + beta*Md/Mp + delta_n
 
     return constraint
 
@@ -190,7 +190,9 @@ def shellBucklingEurocode(d, t, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma
 
     n = len(d)
     constraint = np.zeros(n)
-
+    sigma_z_sh=np.zeros(n)
+    sigma_t_sh=np.zeros(n)
+    tau_zt_sh=np.zeros(n)
     for i in range(n):
         h = L_reinforced[i]
 
@@ -210,6 +212,10 @@ def shellBucklingEurocode(d, t, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma
         tau_zt_shell = gamma_f*abs(tau_zt_shell)
 
         constraint[i] = _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z_shell, sigma_t_shell, tau_zt_shell, E[i], sigma_y[i])
+        #make them into vectors
+        sigma_z_sh[i]=sigma_z_shell
+        sigma_t_sh[i]=sigma_t_shell
+        tau_zt_sh[i]=tau_zt_shell
 
     return constraint
 
@@ -483,7 +489,7 @@ def _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t, tau_z
         (sigma_z/sigma_z_Rd)**k_z + \
         (sigma_t/sigma_t_Rd)**k_theta - \
         k_i*(sigma_z*sigma_t/sigma_z_Rd/sigma_t_Rd) + \
-        (tau_zt/tau_zt_Rd)**k_tau - 1
+        (tau_zt/tau_zt_Rd)**k_tau
 
     return buckling_constraint
 

@@ -48,8 +48,8 @@ def main(recordfile,SNOPTflag=False):
     #
     mytwr = set_as_top(TowerSE()) # >> creates instance of tower assembly,(!) maybe make it "top"
     #execfile(r'C:\PROJECTS\OFFSHORE_WIND\AML\twrInputs_maintower.py')
-    execfile(r'C:\PROJECTS\OFFSHORE_WIND\AML\twrInputs_FSGtower.py')
-    #execfile(r'D:\RRD_ENGINEERING\PROJECTS\NREL\OFFSHOREWIND\AML\twrInputs_maintower.py')
+    #execfile(r'C:\PROJECTS\OFFSHORE_WIND\AML\twrInputs_FSGtower.py')
+    execfile(r'D:\RRD_ENGINEERING\PROJECTS\NREL\OFFSHOREWIND\AML\twrInputs_maintower.py')
 ##    mytwr=SetTowerInputs.main(avgcnst[0],avgcnst[1],avgcnst[2],avgcnst[3],avgcnst[4],avgcnst[5],avgcnst[6],avgcnst[7], avgcnst[8],avgcnst[9],avgcnst[10],avgcnst[11],avgcnst[12],avgcnst[13],avgcnst[14])
 
     mytwr.run()   # >>> (!) I can't yet run the assembly
@@ -96,15 +96,15 @@ def main(recordfile,SNOPTflag=False):
     mytwr.driver.add_parameter('t',        low=MnCnst[2], high=MxCnst[2])   #This is t at three stations
 
     #6. Constraitns
-    mytwr.driver.add_constraint('tower1.stress <= 0.0')
-    mytwr.driver.add_constraint('tower2.stress <= 0.0')
-    mytwr.driver.add_constraint('tower1.buckling <= 0.0')
-    mytwr.driver.add_constraint('tower2.buckling <= 0.0')
-    mytwr.driver.add_constraint('tower1.shellBuckling <= 0.0')
-    mytwr.driver.add_constraint('tower2.shellBuckling <= 0.0')
+    mytwr.driver.add_constraint('tower1.stress <= 1.0')
+    mytwr.driver.add_constraint('tower2.stress <= 1.0')
+    mytwr.driver.add_constraint('tower1.buckling <= 1.0')
+    mytwr.driver.add_constraint('tower2.buckling <= 1.0')
+    mytwr.driver.add_constraint('tower1.shellBuckling <= 1.0')
+    mytwr.driver.add_constraint('tower2.shellBuckling <= 1.0')
     mytwr.driver.add_constraint('tower1.damage <= 1.0')
     mytwr.driver.add_constraint('gc.weldability <= 0.0')
-    mytwr.driver.add_constraint('gc.manufactuability <= 0.0')
+    mytwr.driver.add_constraint('gc.manufacturability <= 0.0')
 
     mytwr.driver.add_constraint('tower1.f1 >= %f' % (0.95*f0))
     mytwr.driver.add_constraint('tower1.f1 <= %f' % (1.05*f0))
@@ -142,4 +142,7 @@ def main(recordfile,SNOPTflag=False):
 
 if __name__ == '__main__':
     #This is how you call this function
-    main('C:\PROJECTS\OFFSHORE_WIND\AML\SNOPTrecorderBaseline.txt',True)
+    dumpfile='C:\PROJECTS\OFFSHORE_WIND\AML\SNOPTrecorderBaseline.txt'
+    dumpfile='D:\RRD_ENGINEERING\PROJECTS\NREL\OFFSHOREWIND\AML\SNOPTrecorderBaseline.txt'
+    Snoptflag=True
+    main(dumpfile,Snoptflag)

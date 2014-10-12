@@ -290,7 +290,7 @@ def objfunc(x,mytwr,desvarmeans,desvarbds):
 
     mass = TwrWrapper(x,mytwr,desvarmeans,desvarbds)[0]/300.e3
 
-    cnstrts=[0.0]*4 #given as negatives, since PYOPT wants <0
+    cnstrts=[0.0]*4 #given as negatives (at the end), since PYOPT wants <0
     cnstrts[0]=f0Cnstrt1(x,mytwr,desvarmeans,desvarbds)
     cnstrts[1]=f0Cnstrt2(x,mytwr,desvarmeans,desvarbds)
     cnstrts[2]=GLCnstrt(x,mytwr,desvarmeans,desvarbds)
