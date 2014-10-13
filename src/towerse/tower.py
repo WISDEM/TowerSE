@@ -5,6 +5,7 @@ towerstruc.py
 
 Created by Andrew Ning on 2012-01-20.
 Copyright (c) NREL. All rights reserved.
+<<<<<<< HEAD
 
 HISTORY:  2012 created
           -7/2014:  Bugs found in the call to shellBucklingEurocode from towerwithFrame3DD. Fixed.
@@ -88,6 +89,7 @@ class AeroLoads(VariableTree):
     Pz0= Float(units='N/m', desc='Distributed load at z=0 MSL')
     q0 =  Float(units='N/m**2', desc='dynamic pressure at z=0 MSL')
     beta0 = Float(units='deg', desc='wind/wave angle relative to inertia c.s.')
+
 # -----------------
 #  Components
 # -----------------
@@ -101,11 +103,11 @@ class TowerWindDrag(Component):
     z = Array(iotype='in', units='m', desc='heights where wind speed was computed')
     d = Array(iotype='in', units='m', desc='corresponding diameter of cylinder section')
 
-
     # parameters
     beta = Array(iotype='in', units='deg', desc='corresponding wind angles relative to inertial coordinate system')
     rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
     mu = Float(1.7934e-5, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of air')
+
     cd_usr =Float(iotype='in', units=None, desc='User input drag coefficient to override Reynolds number based one')
 
     # out
@@ -132,7 +134,7 @@ class TowerWindDrag(Component):
         # Add possiblity of external Cd -RRD
         if self.cd_usr:
             cd = self.cd_usr
-			Re = 1.0
+            Re = 1.0
             dcd_dRe = 0.0
         Fp = q*cd*d
 
@@ -141,6 +143,21 @@ class TowerWindDrag(Component):
         Px = Fp*cosd(beta)
         Py = Fp*sind(beta)
         Pz = 0.*Fp
+
+        if self.cd_usr:
+            cd = self.cd_usr
+            Re = 1.0
+            dcd_dRe = 0.0
+        else:
+            Re = rho*U*d/mu
+            cd, dcd_dRe = cylinderDrag(Re)
+        Fp = q*cd*d
+
+        # components of distributed loads
+        Px = Fp*cosd(beta)
+        Py = Fp*sind(beta)
+        Pz = 0*Fp
+
 
         # pack data
         self.windLoads.Px = Px
@@ -194,6 +211,7 @@ class TowerWaveDrag(Component):
 
     # variables
     U = Array(iotype='in', units='m/s', desc='magnitude of wave speed')
+
     U0= Float(iotype='in', units='m/s', desc='magnitude of wave speed at z=0 MSL')
     A = Array(iotype='in', units='m/s**2', desc='magnitude of wave acceleration')
     A0= Float(iotype='in', units='m/s**2', desc='magnitude of wave acceleration at z=0 MSL')
@@ -201,6 +219,7 @@ class TowerWaveDrag(Component):
     d = Array(iotype='in', units='m', desc='corresponding diameter of cylinder section')
 
     # parameters
+
     wlevel = Float(iotype='in', units='m', desc='Water Level, to assess z w.r.t. MSL')
     beta = Array(iotype='in', units='deg', desc='corresponding wave angles relative to inertial coordinate system')
     beta0= Float(iotype='in', units='deg', desc='corresponding wave angles relative to inertial coordinate system at z=0 MSL')
@@ -240,6 +259,10 @@ class TowerWaveDrag(Component):
         if self.cd_usr:
             cd = self.cd_usr*np.ones(cd.size)
             dcd_dRe = 0.0
+
+        d = self.d
+        mu = self.mu
+        beta = self.beta
 
         # inertial and drag forces
         Fi = rho*self.cm*math.pi/4.0*d**2*self.A  # Morrison's equation
@@ -284,8 +307,6 @@ class TowerWaveDrag(Component):
         self.waveLoads.z = self.z
         self.waveLoads.beta = beta
         self.waveLoads.d = d
-
-
 
 
         # derivatives
@@ -571,7 +592,7 @@ class RotorLoads(Component):
     m_RNA = Float(iotype='in', units='kg', desc='mass of rotor nacelle assembly')
     rna_cm = Array(iotype='in', units='m', desc='location of RNA center of mass relative to tower top in yaw-aligned c.s.')
 
-	rna_weightM = Bool(True,iotype='in', units=None, desc='Flag to indicate whether or not the RNA weight should be considered.\
+    rna_weightM = Bool(True,iotype='in', units=None, desc='Flag to indicate whether or not the RNA weight should be considered.\
                       An upwind overhang may lead to unconservative estimates due to the P-Delta effect(suggest not using). For downwind turbines set to True. ')
     # These are used for backwards compatibility - do not use
     T = Float(iotype='in', desc='thrust in hub-aligned coordinate system') #THIS MEANS STILL YAWED THOUGH (Shaft tilt)
@@ -624,14 +645,14 @@ class RotorLoads(Component):
 
         F += F_w
 
-		if rna_weightM:
+        if self.rna_weightM:
            M += M_w
         else:
  			#REMOVE WEIGHT EFFECT TO ACCOUNT FOR P-Delta Effect
 			print "!!!! No weight effect on rotor moments -TowerSE  !!!!"
 
 		# put back in array
-		self.top_F = np.array([F.x, F.y, F.z])
+        self.top_F = np.array([F.x, F.y, F.z])
         self.top_M = np.array([M.x, M.y, M.z])
 
 
@@ -712,7 +733,6 @@ class GeometricConstraints(Component):
 
         inputs = ('d', 't')
         outputs = ('weldability', 'manufacturability')
-r
         return inputs, outputs
 
 
@@ -828,6 +848,7 @@ class TowerBase(Component):
 
         # fatigue
         N_DEL = [365*24*3600*self.life]*len(z)
+
         M_DEL = np.interp(z, self.z_DEL, self.M_DEL)
 
         damage = fatigue(M_DEL, N_DEL, d, t, self.m_SN, self.DC, self.gamma_fatigue, stress_factor=1.0, weld_factor=True)
@@ -1100,6 +1121,7 @@ class TowerWithFrame3DD(TowerBase):
 
         load = frame3dd.StaticLoadCase(gx, gy, gz)
 
+
         # tower top load  (have removed RNA weight from these forces since Frame3DD accounts for it)
 
         nF = np.array([n])
@@ -1183,12 +1205,12 @@ class TowerWithFrame3DD(TowerBase):
         hoop_stress = hoopStressEurocode(self.windLoads, self.waveLoads,
             self.z, self.d, self.t, self.L_reinforced)
 
+
         # von mises stress
         self.stress = vonMisesStressUtilization(axial_stress, hoop_stress, shear_stress,
             self.gamma_f*self.gamma_m*self.gamma_n, self.sigma_y)
 
         # buckling
-
         junk=np.ones(nodes.node.size)
         # global buckling changed d and t to self.d and self.t
         self.shellBuckling = shellBucklingEurocode(self.d, self.t, axial_stress, hoop_stress, shear_stress,
@@ -1198,7 +1220,6 @@ class TowerWithFrame3DD(TowerBase):
         tower_height = self.z[-1] - self.z[0]
         self.buckling = bucklingGL(self.d, self.t, Fz, Myy, tower_height, self.E*junk,
             self.sigma_y*junk, self.gamma_f, self.gamma_b)
-
 
         # fatigue
         self.damage = self.fatigue()
@@ -1223,11 +1244,12 @@ class TowerSE(Assembly):
     d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
     t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
     n = Array(iotype='in', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
-    L_reinforced = Float(iotype='in', units='m', desc='distance along tower for reinforcements used in buckling calc')
+    L_reinforced = Array(iotype='in', units='m', desc='distance along tower for reinforcements used in buckling calc')
     n_monopile = Int(iotype='in', desc='number of finite elements in monopile, must be a minimum of 1 (top and bottom nodes)')
     yaw = Float(0.0, iotype='in', units='deg', desc='yaw angle')
     tilt = Float(0.0, iotype='in', units='deg', desc='tilt angle')
     downwind = Bool(False, iotype='in', desc='flag if rotor is downwind')
+    rna_weightM = Bool(True, iotype='in', desc='flag to consider or not the RNA weight effect on Moment')
 
     # environment
     wind_rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
@@ -1278,7 +1300,7 @@ class TowerSE(Assembly):
     gamma_f = Float(1.35, iotype='in', desc='safety factor on loads')
     gamma_m = Float(1.1, iotype='in', desc='safety factor on materials')
     gamma_n = Float(1.0, iotype='in', desc='safety factor on consequence of failure')
-    gamma_b = Float(1.1, iotype='in', desc='safety factor on consequence of failure')
+    gamma_b = Float(1.1, iotype='in', desc='buckling safety factor on consequence of failure')
 
     # fatigue parameters
     life = Float(20.0, iotype='in', desc='fatigue life of tower')
@@ -1376,6 +1398,7 @@ class TowerSE(Assembly):
         self.connect('wind1.beta', 'windLoads1.beta')
         self.connect('wind_rho', 'windLoads1.rho')
         self.connect('wind_mu', 'windLoads1.mu')
+
         self.connect('wind_cd', 'windLoads1.cd_usr')#-RRD
         self.connect('geometry.z_node', 'windLoads1.z')
         self.connect('geometry.d_node', 'windLoads1.d')
@@ -1385,6 +1408,7 @@ class TowerSE(Assembly):
         self.connect('wind2.beta', 'windLoads2.beta')
         self.connect('wind_rho', 'windLoads2.rho')
         self.connect('wind_mu', 'windLoads2.mu')
+
         self.connect('wind_cd', 'windLoads2.cd_usr')#-RRD
         self.connect('geometry.z_node', 'windLoads2.z')
         self.connect('geometry.d_node', 'windLoads2.d')
@@ -1419,7 +1443,6 @@ class TowerSE(Assembly):
         self.connect('geometry.z_node', 'waveLoads2.z')
         self.connect('geometry.d_node', 'waveLoads2.d')
 
-
         # connections to rna
         self.connect('blades_mass', 'rna.blades_mass')
         self.connect('blades_I', 'rna.blades_I')
@@ -1432,6 +1455,7 @@ class TowerSE(Assembly):
 
         # connections to rotorloads1
         self.connect('downwind', 'rotorloads1.downwind')
+        self.connect('rna_weightM', 'rotorloads1.rna_weightM')
         self.connect('rotorF1', 'rotorloads1.F')
         self.connect('rotorM1', 'rotorloads1.M')
         self.connect('hub_cm', 'rotorloads1.r_hub')
@@ -1442,6 +1466,7 @@ class TowerSE(Assembly):
 
         # connections to rotorloads2
         self.connect('downwind', 'rotorloads2.downwind')
+        self.connect('rna_weightM', 'rotorloads2.rna_weightM')
         self.connect('rotorF2', 'rotorloads2.F')
         self.connect('rotorM2', 'rotorloads2.M')
         self.connect('hub_cm', 'rotorloads2.r_hub')
@@ -1569,8 +1594,8 @@ if __name__ == '__main__':
     tower.t = [0.027*1.3, 0.023*1.3, 0.019*1.3]
     tower.n = [10, 10]
     tower.n_reinforced = 3
-	tower.L_reinforced=np.array([30.])#,30.,30.]) #[m] buckling length
-	tower.yaw = 0.0
+    tower.L_reinforced=np.array([30.])#,30.,30.]) #[m] buckling length
+    tower.yaw = 0.0
     tower.tilt = 5.0
     # ---------------
 
@@ -1658,7 +1683,6 @@ if __name__ == '__main__':
     # --- run ---
     tower.run()
 
-
     print 'mass (kg) =', tower.mass
     print 'f1 (Hz) =', tower.f1
     print 'f2 (Hz) =', tower.f2
@@ -1677,6 +1701,7 @@ if __name__ == '__main__':
     print 'Shell buckling =', tower.shellBuckling2
 
     print 'damage =', tower.damage
+
     import matplotlib.pyplot as plt
     plt.figure(figsize=(5.0, 3.5))
     plt.subplot2grid((3, 3), (0, 0), colspan=2, rowspan=3)

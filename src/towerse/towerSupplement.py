@@ -212,6 +212,7 @@ def shellBucklingEurocode(d, t, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma
         tau_zt_shell = gamma_f*abs(tau_zt_shell)
 
         constraint[i] = _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z_shell, sigma_t_shell, tau_zt_shell, E[i], sigma_y[i])
+
         #make them into vectors
         sigma_z_sh[i]=sigma_z_shell
         sigma_t_sh[i]=sigma_t_shell
