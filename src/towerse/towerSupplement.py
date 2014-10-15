@@ -106,7 +106,7 @@ def vonMisesStressUtilization(axial_stress, hoop_stress, shear_stress, gamma, si
     # stress margin
     stress_utilization = gamma * von_mises / sigma_y
 
-    return stress_utilization
+    return stress_utilization  #This must be <1 to pass
 
 
 
@@ -157,7 +157,7 @@ def bucklingGL(d, t, Fz, Myy, tower_height, E, sigma_y, gamma_f=1.2, gamma_b=1.1
     delta_n = 0.25*kappa*lambda_bar**2
     delta_n = np.minimum(delta_n, 0.1)
 
-    constraint = Nd/(kappa*Np) + beta*Md/Mp + delta_n
+    constraint = Nd/(kappa*Np) + beta*Md/Mp + delta_n  #this is utilization must be <1
 
     return constraint
 
@@ -211,7 +211,7 @@ def shellBucklingEurocode(d, t, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma
         sigma_t_shell = gamma_f*abs(sigma_t_shell)
         tau_zt_shell = gamma_f*abs(tau_zt_shell)
 
-        constraint[i] = _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z_shell, sigma_t_shell, tau_zt_shell, E[i], sigma_y[i])
+        constraint[i] = _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z_shell, sigma_t_shell, tau_zt_shell, E[i], sigma_y[i]) #this is utilization must be <1
 
         #make them into vectors
         sigma_z_sh[i]=sigma_z_shell
@@ -492,7 +492,7 @@ def _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t, tau_z
         k_i*(sigma_z*sigma_t/sigma_z_Rd/sigma_t_Rd) + \
         (tau_zt/tau_zt_Rd)**k_tau
 
-    return buckling_constraint
+    return buckling_constraint #this is utilization must be <1
 
 
 

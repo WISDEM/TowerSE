@@ -601,7 +601,7 @@ class RotorLoads(Component):
     # parameters
     downwind = Bool(False, iotype='in')
     tilt = Float(iotype='in', units='deg')
-    g = Float(9.81, iotype='in', units='m/s**2')
+    g = Float(9.81, iotype='in', units='m/s**2', desc='Gravity Acceleration (ABSOLUTE VALUE!)')
 
     # out
     top_F = Array(iotype='out')  # in yaw-aligned
