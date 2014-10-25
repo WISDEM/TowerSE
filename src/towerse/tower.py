@@ -467,250 +467,6 @@ class TowerDiscretization(Component):
         return J
 
 
-
-
-class RNAMass(Component):
-
-    # variables
-    blades_mass = Float(iotype='in', units='kg', desc='mass of all blade')
-    hub_mass = Float(iotype='in', units='kg', desc='mass of hub')
-    nac_mass = Float(iotype='in', units='kg', desc='mass of nacelle')
-
-    hub_cm = Array(iotype='in', units='m', desc='location of hub center of mass relative to tower top in yaw-aligned c.s.')
-    nac_cm = Array(iotype='in', units='m', desc='location of nacelle center of mass relative to tower top in yaw-aligned c.s.')
-
-    # TODO: check on this???
-    # order for all moments of inertia is (xx, yy, zz, xy, xz, yz) in the yaw-aligned coorinate system
-    blades_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of all blades about hub center')
-    hub_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of hub about its center of mass')
-    nac_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of nacelle about its center of mass')
-
-    # outputs
-    rna_mass = Float(iotype='out', units='kg', desc='total mass of RNA')
-    rna_cm = Array(iotype='out', units='m', desc='location of RNA center of mass relative to tower top in yaw-aligned c.s.')
-    rna_I_TT = Array(iotype='out', units='kg*m**2', desc='mass moments of inertia of RNA about tower top in yaw-aligned coordinate system')
-
-
-    def _assembleI(self, Ixx, Iyy, Izz, Ixy, Ixz, Iyz):
-        return np.array([[Ixx, Ixy, Ixz], [Ixy, Iyy, Iyz], [Ixz, Iyz, Izz]])
-
-
-    def _unassembleI(self, I):
-        return np.array([I[0, 0], I[1, 1], I[2, 2], I[0, 1], I[0, 2], I[1, 2]])
-
-
-    def execute(self):
-
-        self.rotor_mass = self.blades_mass + self.hub_mass
-        self.nac_mass = self.nac_mass
-
-        # rna mass
-        self.rna_mass = self.rotor_mass + self.nac_mass
-
-        # rna cm
-        self.rna_cm = (self.rotor_mass*self.hub_cm + self.nac_mass*self.nac_cm)/self.rna_mass
-
-        # rna I
-        blades_I = self._assembleI(*self.blades_I)
-        hub_I = self._assembleI(*self.hub_I)
-        nac_I = self._assembleI(*self.nac_I)
-        rotor_I = blades_I + hub_I
-
-        R = self.hub_cm
-        rotor_I_TT = rotor_I + self.rotor_mass*(np.dot(R, R)*np.eye(3) - np.outer(R, R))
-
-        R = self.nac_cm
-        nac_I_TT = nac_I + self.nac_mass*(np.dot(R, R)*np.eye(3) - np.outer(R, R))
-
-        self.rna_I_TT = self._unassembleI(rotor_I_TT + nac_I_TT)
-
-
-    def list_deriv_vars(self):
-
-        inputs = ('blades_mass', 'hub_mass', 'nac_mass', 'hub_cm', 'nac_cm', 'blades_I', 'hub_I', 'nac_I')
-        outputs = ('rna_mass', 'rna_cm', 'rna_I_TT')
-
-        return inputs, outputs
-
-
-    def provideJ(self):
-
-        # mass
-        dmass = np.hstack([np.array([1.0, 1.0, 1.0]), np.zeros(2*3+3*6)])
-
-        # cm
-        top = (self.rotor_mass*self.hub_cm + self.nac_mass*self.nac_cm)
-        dcm_dblademass = (self.rna_mass*self.hub_cm - top)/self.rna_mass**2
-        dcm_dhubmass = (self.rna_mass*self.hub_cm - top)/self.rna_mass**2
-        dcm_dnacmass = (self.rna_mass*self.nac_cm - top)/self.rna_mass**2
-        dcm_dhubcm = self.rotor_mass/self.rna_mass*np.eye(3)
-        dcm_dnaccm = self.nac_mass/self.rna_mass*np.eye(3)
-
-        dcm = hstack([dcm_dblademass, dcm_dhubmass, dcm_dnacmass, dcm_dhubcm,
-            dcm_dnaccm, np.zeros((3, 3*6))])
-
-        # I
-        R = self.hub_cm
-        const = self._unassembleI(np.dot(R, R)*np.eye(3) - np.outer(R, R))
-        dI_dblademass = const
-        dI_dhubmass = const
-        dI_drx = self.rotor_mass*self._unassembleI(2*R[0]*np.eye(3) - np.array([[2*R[0], R[1], R[2]], [R[1], 0.0, 0.0], [R[2], 0.0, 0.0]]))
-        dI_dry = self.rotor_mass*self._unassembleI(2*R[1]*np.eye(3) - np.array([[0.0, R[0], 0.0], [R[0], 2*R[1], R[2]], [0.0, R[2], 0.0]]))
-        dI_drz = self.rotor_mass*self._unassembleI(2*R[2]*np.eye(3) - np.array([[0.0, 0.0, R[0]], [0.0, 0.0, R[1]], [R[0], R[1], 2*R[2]]]))
-        dI_dhubcm = np.vstack([dI_drx, dI_dry, dI_drz]).T
-
-        R = self.nac_cm
-        const = self._unassembleI(np.dot(R, R)*np.eye(3) - np.outer(R, R))
-        dI_dnacmass = const
-        dI_drx = self.nac_mass*self._unassembleI(2*R[0]*np.eye(3) - np.array([[2*R[0], R[1], R[2]], [R[1], 0.0, 0.0], [R[2], 0.0, 0.0]]))
-        dI_dry = self.nac_mass*self._unassembleI(2*R[1]*np.eye(3) - np.array([[0.0, R[0], 0.0], [R[0], 2*R[1], R[2]], [0.0, R[2], 0.0]]))
-        dI_drz = self.nac_mass*self._unassembleI(2*R[2]*np.eye(3) - np.array([[0.0, 0.0, R[0]], [0.0, 0.0, R[1]], [R[0], R[1], 2*R[2]]]))
-        dI_dnaccm = np.vstack([dI_drx, dI_dry, dI_drz]).T
-
-        dI_dbladeI = np.eye(6)
-        dI_dhubI = np.eye(6)
-        dI_dnacI = np.eye(6)
-
-        dI = hstack([dI_dblademass, dI_dhubmass, dI_dnacmass, dI_dhubcm, dI_dnaccm,
-            dI_dbladeI, dI_dhubI, dI_dnacI])
-
-        J = np.vstack([dmass, dcm, dI])
-
-        return J
-
-
-
-
-
-
-class RotorLoads(Component):
-
-    # variables
-    F = Array(iotype='in', desc='forces in hub-aligned coordinate system')
-    M = Array(iotype='in', desc='moments in hub-aligned coordinate system')
-    r_hub = Array(iotype='in', desc='position of rotor hub relative to tower top in yaw-aligned c.s.')
-    m_RNA = Float(iotype='in', units='kg', desc='mass of rotor nacelle assembly')
-    rna_cm = Array(iotype='in', units='m', desc='location of RNA center of mass relative to tower top in yaw-aligned c.s.')
-
-    rna_weightM = Bool(True,iotype='in', units=None, desc='Flag to indicate whether or not the RNA weight should be considered.\
-                      An upwind overhang may lead to unconservative estimates due to the P-Delta effect(suggest not using). For downwind turbines set to True. ')
-    # These are used for backwards compatibility - do not use
-    T = Float(iotype='in', desc='thrust in hub-aligned coordinate system') #THIS MEANS STILL YAWED THOUGH (Shaft tilt)
-    Q = Float(iotype='in', desc='torque in hub-aligned coordinate system')
-
-    # parameters
-    downwind = Bool(False, iotype='in')
-    tilt = Float(iotype='in', units='deg')
-    g = Float(9.81, iotype='in', units='m/s**2', desc='Gravity Acceleration (ABSOLUTE VALUE!)')
-
-    # out
-    top_F = Array(iotype='out')  # in yaw-aligned
-    top_M = Array(iotype='out')
-
-    missing_deriv_policy = 'assume_zero'
-
-
-    def execute(self):
-
-        if self.T != 0:
-            F = [self.T, 0.0, 0.0]
-            M = [self.Q, 0.0, 0.0]
-        else:
-            F = self.F
-            M = self.M
-
-        F = DirectionVector.fromArray(F).hubToYaw(self.tilt)
-        M = DirectionVector.fromArray(M).hubToYaw(self.tilt)
-
-        # change x-direction if downwind
-        r_hub = np.copy(self.r_hub)
-        rna_cm = np.copy(self.rna_cm)
-        if self.downwind:
-            r_hub[0] *= -1
-            rna_cm[0] *= -1
-        r_hub = DirectionVector.fromArray(r_hub)
-        rna_cm = DirectionVector.fromArray(rna_cm)
-        self.save_rhub = r_hub
-        self.save_rcm = rna_cm
-
-        # aerodynamic moments
-        M = M + r_hub.cross(F)
-        self.saveF = F
-
-
-        # add weight loads
-        F_w = DirectionVector(0.0, 0.0, -self.m_RNA*self.g)
-        M_w = rna_cm.cross(F_w)
-        self.saveF_w = F_w
-
-        F += F_w
-
-        if self.rna_weightM:
-           M += M_w
-        else:
- 			#REMOVE WEIGHT EFFECT TO ACCOUNT FOR P-Delta Effect
-			print "!!!! No weight effect on rotor moments -TowerSE  !!!!"
-
-		# put back in array
-        self.top_F = np.array([F.x, F.y, F.z])
-        self.top_M = np.array([M.x, M.y, M.z])
-
-
-    def list_deriv_vars(self):
-
-        inputs = ('F', 'M', 'r_hub', 'm_RNA', 'rna_cm')
-        outputs = ('top_F', 'top_M')
-
-        return inputs, outputs
-
-    def provideJ(self):
-
-        dF = DirectionVector.fromArray(self.F).hubToYaw(self.tilt)
-        dFx, dFy, dFz = dF.dx, dF.dy, dF.dz
-
-        dtopF_dFx = np.array([dFx['dx'], dFy['dx'], dFz['dx']])
-        dtopF_dFy = np.array([dFx['dy'], dFy['dy'], dFz['dy']])
-        dtopF_dFz = np.array([dFx['dz'], dFy['dz'], dFz['dz']])
-        dtopF_dF = hstack([dtopF_dFx, dtopF_dFy, dtopF_dFz])
-        dtopF_w_dm = np.array([0.0, 0.0, -self.g])
-
-        dtopF = hstack([dtopF_dF, np.zeros((3, 6)), dtopF_w_dm, np.zeros((3, 3))])
-
-
-        dM = DirectionVector.fromArray(self.M).hubToYaw(self.tilt)
-        dMx, dMy, dMz = dM.dx, dM.dy, dM.dz
-        dMxcross, dMycross, dMzcross = self.save_rhub.cross_deriv(self.saveF, 'dr', 'dF')
-
-        dtopM_dMx = np.array([dMx['dx'], dMy['dx'], dMz['dx']])
-        dtopM_dMy = np.array([dMx['dy'], dMy['dy'], dMz['dy']])
-        dtopM_dMz = np.array([dMx['dz'], dMy['dz'], dMz['dz']])
-        dtopM_dM = hstack([dtopM_dMx, dtopM_dMy, dtopM_dMz])
-        dM_dF = np.array([dMxcross['dF'], dMycross['dF'], dMzcross['dF']])
-
-        dtopM_dFx = np.dot(dM_dF, dtopF_dFx)
-        dtopM_dFy = np.dot(dM_dF, dtopF_dFy)
-        dtopM_dFz = np.dot(dM_dF, dtopF_dFz)
-        dtopM_dF = hstack([dtopM_dFx, dtopM_dFy, dtopM_dFz])
-        dtopM_dr = np.array([dMxcross['dr'], dMycross['dr'], dMzcross['dr']])
-
-        dMx_w_cross, dMy_w_cross, dMz_w_cross = self.save_rcm.cross_deriv(self.saveF_w, 'dr', 'dF')
-
-        dtopM_drnacm = np.array([dMx_w_cross['dr'], dMy_w_cross['dr'], dMz_w_cross['dr']])
-        dtopM_dF_w = np.array([dMx_w_cross['dF'], dMy_w_cross['dF'], dMz_w_cross['dF']])
-        dtopM_dm = np.dot(dtopM_dF_w, dtopF_w_dm)
-
-        if self.downwind:
-            dtopM_dr[:, 0] *= -1
-            dtopM_drnacm[:, 0] *= -1
-
-        dtopM = hstack([dtopM_dF, dtopM_dM, dtopM_dr, dtopM_dm, dtopM_drnacm])
-
-        J = vstack([dtopF, dtopM])
-
-        return J
-
-
-
 class GeometricConstraints(Component):
     """docstring for OtherConstraints"""
 
@@ -833,8 +589,6 @@ class TowerBase(Component):
 
 
         return Px, Py, Pz
-
-
 
 
     def fatigue(self):
@@ -1247,9 +1001,15 @@ class TowerSE(Assembly):
     L_reinforced = Array(iotype='in', units='m', desc='distance along tower for reinforcements used in buckling calc')
     n_monopile = Int(iotype='in', desc='number of finite elements in monopile, must be a minimum of 1 (top and bottom nodes)')
     yaw = Float(0.0, iotype='in', units='deg', desc='yaw angle')
-    tilt = Float(0.0, iotype='in', units='deg', desc='tilt angle')
-    downwind = Bool(False, iotype='in', desc='flag if rotor is downwind')
-    rna_weightM = Bool(True, iotype='in', desc='flag to consider or not the RNA weight effect on Moment')
+
+    # rna
+    top_m = Float(iotype='in')
+    top_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia. order: (xx, yy, zz, xy, xz, yz)')
+    top_cm = Array(iotype='in')
+    top1_F = Array(iotype='in')
+    top1_M = Array(iotype='in')
+    top2_F = Array(iotype='in')
+    top2_M = Array(iotype='in')
 
     # environment
     wind_rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
@@ -1270,25 +1030,6 @@ class TowerSE(Assembly):
     # constraint parameters
     min_d_to_t = Float(120.0, iotype='in', desc='minimum allowable diameter to thickness ratio')
     min_taper = Float(0.4, iotype='in', desc='minimum allowable taper ratio from tower top to tower bottom')
-
-
-    # rotor loads
-    rotorF1 = Array(np.zeros(3), iotype='in', desc='forces in hub-aligned coordinate system at rotor hub')
-    rotorM1 = Array(np.zeros(3), iotype='in', desc='moments in hub-aligned coordinate system at rotor hub')
-    rotorF2 = Array(np.zeros(3), iotype='in', desc='forces in hub-aligned coordinate system at rotor hub')
-    rotorM2 = Array(np.zeros(3), iotype='in', desc='moments in hub-aligned coordinate system at rotor hub')
-
-    # RNA mass properties
-    blades_mass = Float(iotype='in', units='kg', desc='mass of all blades')
-    hub_mass = Float(iotype='in', units='kg', desc='mass of hub')
-    nac_mass = Float(iotype='in', units='kg', desc='mass of nacelle')
-
-    hub_cm = Array(iotype='in', units='m', desc='location of hub center of mass relative to tower top in yaw-aligned c.s.')
-    nac_cm = Array(iotype='in', units='m', desc='location of nacelle center of mass relative to tower top in yaw-aligned c.s.')
-
-    blades_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of all blades about hub center')
-    hub_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of hub about its center of mass')
-    nac_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of nacelle about its center of mass')
 
     # material properties
     E = Float(210e9, iotype='in', units='N/m**2', desc='material modulus of elasticity')
@@ -1349,17 +1090,13 @@ class TowerSE(Assembly):
         self.add('waveLoads1', TowerWaveDrag())
         self.add('waveLoads2', TowerWaveDrag())
         self.add('soil', SoilBase())
-        self.add('rna', RNAMass())
-        self.add('rotorloads1', RotorLoads())
-        self.add('rotorloads2', RotorLoads())
         self.add('tower1', TowerBase())
         self.add('tower2', TowerBase())
         self.add('gc', GeometricConstraints())
 
         # self.driver.workflow.add(['geometry', 'wind', 'wave', 'windLoads', 'waveLoads', 'soil', 'rna', 'rotorloads', 'tower'])
         self.driver.workflow.add(['geometry', 'wind1', 'wind2', 'wave1', 'wave2',
-            'windLoads1', 'windLoads2', 'waveLoads1', 'waveLoads2', 'soil', 'rna',
-            'rotorloads1', 'rotorloads2', 'tower1', 'tower2', 'gc'])
+            'windLoads1', 'windLoads2', 'waveLoads1', 'waveLoads2', 'soil', 'tower1', 'tower2', 'gc'])
         # TODO: probably better to do this with a driver or something rather than manually setting 2 cases
 
         # connections to geometry
@@ -1414,7 +1151,6 @@ class TowerSE(Assembly):
         self.connect('geometry.d_node', 'windLoads2.d')
 
         # connections to waveLoads1
-
         self.connect('wave1.U', 'waveLoads1.U')
         self.connect('wave1.U0', 'waveLoads1.U0')
         self.connect('wave1.A', 'waveLoads1.A')
@@ -1443,38 +1179,6 @@ class TowerSE(Assembly):
         self.connect('geometry.z_node', 'waveLoads2.z')
         self.connect('geometry.d_node', 'waveLoads2.d')
 
-        # connections to rna
-        self.connect('blades_mass', 'rna.blades_mass')
-        self.connect('blades_I', 'rna.blades_I')
-        self.connect('hub_mass', 'rna.hub_mass')
-        self.connect('hub_cm', 'rna.hub_cm')
-        self.connect('hub_I', 'rna.hub_I')
-        self.connect('nac_mass', 'rna.nac_mass')
-        self.connect('nac_cm', 'rna.nac_cm')
-        self.connect('nac_I', 'rna.nac_I')
-
-        # connections to rotorloads1
-        self.connect('downwind', 'rotorloads1.downwind')
-        self.connect('rna_weightM', 'rotorloads1.rna_weightM')
-        self.connect('rotorF1', 'rotorloads1.F')
-        self.connect('rotorM1', 'rotorloads1.M')
-        self.connect('hub_cm', 'rotorloads1.r_hub')
-        self.connect('rna.rna_cm', 'rotorloads1.rna_cm')
-        self.connect('tilt', 'rotorloads1.tilt')
-        self.connect('g', 'rotorloads1.g')
-        self.connect('rna.rna_mass', 'rotorloads1.m_RNA')
-
-        # connections to rotorloads2
-        self.connect('downwind', 'rotorloads2.downwind')
-        self.connect('rna_weightM', 'rotorloads2.rna_weightM')
-        self.connect('rotorF2', 'rotorloads2.F')
-        self.connect('rotorM2', 'rotorloads2.M')
-        self.connect('hub_cm', 'rotorloads2.r_hub')
-        self.connect('rna.rna_cm', 'rotorloads2.rna_cm')
-        self.connect('tilt', 'rotorloads2.tilt')
-        self.connect('g', 'rotorloads2.g')
-        self.connect('rna.rna_mass', 'rotorloads2.m_RNA')
-
         # connections to tower
         self.connect('towerHeight', 'tower1.towerHeight')
         self.connect('geometry.z_node', 'tower1.z')
@@ -1484,12 +1188,12 @@ class TowerSE(Assembly):
         self.connect('windLoads1.windLoads', 'tower1.windLoads')
         self.connect('waveLoads1.waveLoads', 'tower1.waveLoads')
         self.connect('soil.k', 'tower1.k_soil')
-        self.connect('rna.rna_mass', 'tower1.top_m')
-        self.connect('rna.rna_cm', 'tower1.top_cm')
-        self.connect('rna.rna_I_TT', 'tower1.top_I')
-        self.connect('rotorloads1.top_F', 'tower1.top_F')
-        self.connect('rotorloads1.top_M', 'tower1.top_M')
         self.connect('yaw', 'tower1.yaw')
+        self.connect('top_m', 'tower1.top_m')
+        self.connect('top_cm', 'tower1.top_cm')
+        self.connect('top_I', 'tower1.top_I')
+        self.connect('top1_F', 'tower1.top_F')
+        self.connect('top1_M', 'tower1.top_M')
         self.connect('g', 'tower1.g')
         self.connect('E', 'tower1.E')
         self.connect('G', 'tower1.G')
@@ -1515,12 +1219,12 @@ class TowerSE(Assembly):
         self.connect('windLoads2.windLoads', 'tower2.windLoads')
         self.connect('waveLoads2.waveLoads', 'tower2.waveLoads')
         self.connect('soil.k', 'tower2.k_soil')
-        self.connect('rna.rna_mass', 'tower2.top_m')
-        self.connect('rna.rna_cm', 'tower2.top_cm')
-        self.connect('rna.rna_I_TT', 'tower2.top_I')
-        self.connect('rotorloads2.top_F', 'tower2.top_F')
-        self.connect('rotorloads2.top_M', 'tower2.top_M')
         self.connect('yaw', 'tower2.yaw')
+        self.connect('top_m', 'tower2.top_m')
+        self.connect('top_cm', 'tower2.top_cm')
+        self.connect('top_I', 'tower2.top_I')
+        self.connect('top2_F', 'tower2.top_F')
+        self.connect('top2_M', 'tower2.top_M')
         self.connect('g', 'tower2.g')
         self.connect('E', 'tower2.E')
         self.connect('G', 'tower2.G')
