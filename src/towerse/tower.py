@@ -23,6 +23,9 @@ from commonse.utilities import sind, cosd, linspace_with_deriv, interp_with_deri
 from commonse.csystem import DirectionVector
 from commonse.environment import WindBase, WaveBase, SoilBase
 from commonse.Material import Material
+
+from jacketse.VarTrees import Frame3DDaux
+
 from towerSupplement import fatigue, hoopStressEurocode, shellBucklingEurocode, \
     bucklingGL, vonMisesStressUtilization
 from akima import Akima
@@ -532,17 +535,17 @@ class TowerBase(Component):
     g = Float(9.81, iotype='in', units='m/s**2')
 
     # top mass
-    top_F = Array(iotype='in')
-    top_M = Array(iotype='in')
-    top_m = Float(iotype='in')
+    top_F = Array(iotype='in', desc='Forces from the Rotor Nacelle Assembly at the tower top centerline (no weight)')
+    top_M = Array(iotype='in', desc='Forces from the Rotor Nacelle Assembly at the tower top centerline (no weight contribution)')
+    top_m = Float(iotype='in', desc='Mass of the RNA')
     top_I = Array(iotype='in', units='kg*m**2', desc='Mass moments of inertia. order: (xx, yy, zz, xy, xz, yz)')
-    top_cm = Array(iotype='in')
+    top_cm = Array(iotype='in', desc='RNA CM location w.r.t. to tower top centerline.')
 
     # soil
     k_soil = Array(iotype='in', desc='Stiffness properties at base of foundation')
 
     # material properties
-    material = Instance(Material(matname='HeavySteel',E=2.1E11,G=8.08E10,rho=8500.,f_y=345.e6), iotype='in', desc='Material properties for the tower shell.')
+    material = Instance(Material(matname='HeavySteel',E=2.1E11,G=8.08E10,rho=8500.,fy=345.e6), iotype='in', desc='Material properties for the tower shell.')
 
 ##    E = Float(210e9, iotype='in', units='N/m**2', desc='material modulus of elasticity')
 ##    G = Float(80.8e9, iotype='in', units='N/m**2', desc='material shear modulus')
@@ -682,16 +685,16 @@ class TowerWithpBEAM(TowerBase):
 
         # von mises stress
         self.stress = vonMisesStressUtilization(axial_stress, hoop_stress, shear_stress,
-            self.gamma_f*self.gamma_m*self.gamma_n, self.material.f_y)
+            self.gamma_f*self.gamma_m*self.gamma_n, self.material.fy)
 
         # buckling
         self.shellBuckling = shellBucklingEurocode(d, t, axial_stress, hoop_stress, shear_stress,
-            self.L_reinforced, self.material.E*np.ones(nodes), self.material.f_y*np.ones(nodes),
+            self.L_reinforced, self.material.E*np.ones(nodes), self.material.fy*np.ones(nodes),
             self.gamma_f, self.gamma_b)
 
         tower_height = self.z[-1] - self.z[0]
         self.buckling = bucklingGL(d, t, Fz, My, tower_height, self.material.E*np.ones(nodes),
-            self.material.f_y*np.ones(nodes), self.gamma_f, self.gamma_b)
+            self.material.fy*np.ones(nodes), self.gamma_f, self.gamma_b)
 
         # fatigue
         self.damage = self.fatigue()
@@ -761,6 +764,7 @@ class TowerWithpBEAM(TowerBase):
 
 class TowerWithFrame3DD(TowerBase):
 
+    FrameAuxIns= VarTree(Frame3DDaux(),  iotype='in', desc='Auxiliary Data for Frame3DD')
 
     def __init__(self):
         import frame3dd  # import only if instantiated so that Frame3DD is not required for all users
@@ -826,9 +830,9 @@ class TowerWithFrame3DD(TowerBase):
 
         # ------ options ------------
 
-        shear = True        # 1: include shear deformation
-        geom = False        # 1: include geometric stiffness
-        dx = 10.0           # x-axis increment for internal forces
+        shear = self.FrameAuxIns.sh_fg        #default= True or 1. 1=include shear deformation
+        geom = self.FrameAuxIns.geo_fg        #default=False  or 0 # 1=include geometric stiffness
+        dx = self.FrameAuxIns.deltaz          #default =5. x-axis increment for internal forces
         options = frame3dd.Options(shear, geom, dx)
 
         # -----------------------------------
@@ -858,11 +862,11 @@ class TowerWithFrame3DD(TowerBase):
 
         # ------- enable dynamic analysis ----------
 
-        nM = 2              # number of desired dynamic modes of vibration (below only necessary if nM > 0)
-        Mmethod = 1         # 1: subspace Jacobi     2: Stodola
-        lump = 0            # 0: consistent mass ... 1: lumped mass matrix
-        tol = 1e-9          # mode shape tolerance
-        shift = 0.0         # shift value ... for unrestrained structures
+        nM = self.FrameAuxIns.nModes              # default=6. Number of desired dynamic modes of vibration (below only necessary if nM > 0)
+        Mmethod = self.FrameAuxIns.Mmethod        # default=1. 1: subspace Jacobi     2: Stodola
+        lump = self.FrameAuxIns.lump              # default=0. 0: consistent mass ... 1: lumped mass matrix
+        tol = self.FrameAuxIns.tol                # default=1e-9. Mode shape tolerance
+        shift = self.FrameAuxIns.shift            # default=0. Shift value ... for unrestrained structures
         tower.enableDynamics(nM, Mmethod, lump, tol, shift)
 
         # ----------------------------
@@ -964,18 +968,18 @@ class TowerWithFrame3DD(TowerBase):
 
         # von mises stress
         self.stress = vonMisesStressUtilization(axial_stress, hoop_stress, shear_stress,
-            self.gamma_f*self.gamma_m*self.gamma_n, self.material.f_y)
+            self.gamma_f*self.gamma_m*self.gamma_n, self.material.fy)
 
         # buckling
         junk=np.ones(nodes.node.size)
         # global buckling changed d and t to self.d and self.t
         self.shellBuckling = shellBucklingEurocode(self.d, self.t, axial_stress, hoop_stress, shear_stress,
-            self.L_reinforced, self.material.E*junk, self.material.f_y*junk,
+            self.L_reinforced, self.material.E*junk, self.material.fy*junk,
             self.gamma_f, self.gamma_b)
 
         tower_height = self.z[-1] - self.z[0]
         self.buckling = bucklingGL(self.d, self.t, Fz, Myy, tower_height, self.material.E*junk,
-            self.material.f_y*junk, self.gamma_f, self.gamma_b)
+            self.material.fy*junk, self.gamma_f, self.gamma_b)
 
         # fatigue
         self.damage = self.fatigue()
@@ -1034,7 +1038,7 @@ class TowerSE(Assembly):
     min_taper = Float(0.4, iotype='in', desc='minimum allowable taper ratio from tower top to tower bottom')
 
     # material properties
-    material = Instance(Material(matname='HeavySteel',E=2.1E11,G=8.08E10,rho=8500.,f_y=345.e6), iotype='in',desc='Material properties for the tower shell.')
+    material = Instance(Material(matname='HeavySteel',E=2.1E11,G=8.08E10,rho=8500.,fy=345.e6), iotype='in',desc='Material properties for the tower shell.')
 ##    E = Float(210e9, iotype='in', units='N/m**2', desc='material modulus of elasticity')
 ##    G = Float(80.8e9, iotype='in', units='N/m**2', desc='material shear modulus')
 ##    rho = Float(8500.0, iotype='in', units='kg/m**3', desc='material density')
@@ -1324,7 +1328,7 @@ if __name__ == '__main__':
     tower.nac_cm = np.array([-0.32, 0, 2.40])
     tower.nac_I = np.array([9908302.58, 912488.28, 1160903.54, 0.0, 0.0, 0.0])
     # ---------------'''
-    
+
     # --- rna ---
     tower.top_m = 285598.8 #Float(iotype='in', units='m', desc='RNA (tower top) mass')
     tower.top_I = np.array([1.14930678e+08, 2.20354030e+07, 1.87597425e+07, 0.00000000e+00, 5.03710467e+05, 0.00000000e+00]) #Array(iotype='in', units='kg*m**2', desc='mass moments of inertia. order: (xx, yy, zz, xy, xz, yz)')
@@ -1332,7 +1336,7 @@ if __name__ == '__main__':
     tower.top1_F = np.array([1284744.19620519, 0., -2914124.84400512]) #Array(iotype='in', units='N', desc='Aerodynamic forces')
     tower.top1_M = np.array([3963732.76208099, -2275104.79420872, -346781.68192839]) #Array(iotype='in', units='N*m', desc='Aerodynamic moments')
     tower.top2_F = np.array([930198.60063279, 0., -2883106.12368949]) #Array(iotype='in', units='N', desc='Aerodynamic forces')
-    tower.top2_M = np.array([-1683669.22411597, -2522475.34625363, 147301.97023764]) #Array(iotype='in', units='N*m', desc='Aerodynamic moments')    
+    tower.top2_M = np.array([-1683669.22411597, -2522475.34625363, 147301.97023764]) #Array(iotype='in', units='N*m', desc='Aerodynamic moments')
     # -----------
 
     # --- wind ---
