@@ -5,7 +5,6 @@ towerstruc.py
 
 Created by Andrew Ning on 2012-01-20.
 Copyright (c) NREL. All rights reserved.
-<<<<<<< HEAD
 
 HISTORY:  2012 created
           -7/2014:  Bugs found in the call to shellBucklingEurocode from towerwithFrame3DD. Fixed.
