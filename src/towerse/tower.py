@@ -638,7 +638,7 @@ class TowerWithpBEAM(TowerBase):
         Px, Py, Pz = self.aerohydroLoadsAtNodes()
 
         # add weight loads
-        Pz_weight = -self.rho*self.g*math.pi*d*t
+        Pz_weight = -self.material.rho*self.g*math.pi*d*t
         Pz += Pz_weight
 
         # pBEAM loads object
