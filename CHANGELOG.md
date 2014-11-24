@@ -13,3 +13,7 @@
 [CHANGE]:
 
 - new import of rna mass properties and rotor loads module from CommonSE (was in TowerSE) due to common use by TowerSE and JacketSE
+
+- updates to inputs on materials to use materials from CommonSE (were specified as individual variables)
+
+- updated to use "utilization" rather than "constraint" nomenclature
