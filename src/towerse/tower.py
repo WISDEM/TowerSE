@@ -1005,13 +1005,13 @@ class TowerSE(Assembly):
     yaw = Float(0.0, iotype='in', units='deg', desc='yaw angle')
 
     # rna
-    top_m = Float(iotype='in')
+    top_m = Float(iotype='in', units='kg', desc='RNA (tower top) mass')
     top_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia. order: (xx, yy, zz, xy, xz, yz)')
-    top_cm = Array(iotype='in')
-    top1_F = Array(iotype='in')
-    top1_M = Array(iotype='in')
-    top2_F = Array(iotype='in')
-    top2_M = Array(iotype='in')
+    top_cm = Array(iotype='in', units='m', desc='RNA center of mass')
+    top1_F = Array(iotype='in', units='N', desc='Aerodynamic forces')
+    top1_M = Array(iotype='in', units='N*m', desc='Aerodynamic moments')
+    top2_F = Array(iotype='in', units='N', desc='Aerodynamic forces')
+    top2_M = Array(iotype='in', units='N*m', desc='Aerodynamic moments')
 
     # environment
     wind_rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
@@ -1307,7 +1307,7 @@ if __name__ == '__main__':
     tower.tilt = 5.0
     # ---------------
 
-    # --- blades ---
+    '''# --- blades ---
     tower.blades_mass = 3 * 15241.323
     bladeI = 3 * 8791992.000
     tower.blades_I = np.array([bladeI, bladeI/2.0, bladeI/2.0, 0.0, 0.0, 0.0])
@@ -1323,7 +1323,17 @@ if __name__ == '__main__':
     tower.nac_mass = 221245.8
     tower.nac_cm = np.array([-0.32, 0, 2.40])
     tower.nac_I = np.array([9908302.58, 912488.28, 1160903.54, 0.0, 0.0, 0.0])
-    # ---------------
+    # ---------------'''
+    
+    # --- rna ---
+    tower.top_m = 285598.8 #Float(iotype='in', units='m', desc='RNA (tower top) mass')
+    tower.top_I = np.array([1.14930678e+08, 2.20354030e+07, 1.87597425e+07, 0.00000000e+00, 5.03710467e+05, 0.00000000e+00]) #Array(iotype='in', units='kg*m**2', desc='mass moments of inertia. order: (xx, yy, zz, xy, xz, yz)')
+    tower.top_cm = np.array([-1.13197635, 0., 0.50875268]) #Array(iotype='in', units='m', desc='RNA center of mass')
+    tower.top1_F = np.array([1284744.19620519, 0., -2914124.84400512]) #Array(iotype='in', units='N', desc='Aerodynamic forces')
+    tower.top1_M = np.array([3963732.76208099, -2275104.79420872, -346781.68192839]) #Array(iotype='in', units='N*m', desc='Aerodynamic moments')
+    tower.top2_F = np.array([930198.60063279, 0., -2883106.12368949]) #Array(iotype='in', units='N', desc='Aerodynamic forces')
+    tower.top2_M = np.array([-1683669.22411597, -2522475.34625363, 147301.97023764]) #Array(iotype='in', units='N*m', desc='Aerodynamic moments')    
+    # -----------
 
     # --- wind ---
     towerToShaft = 2.0
