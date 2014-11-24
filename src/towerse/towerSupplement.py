@@ -157,9 +157,9 @@ def bucklingGL(d, t, Fz, Myy, tower_height, E, sigma_y, gamma_f=1.2, gamma_b=1.1
     delta_n = 0.25*kappa*lambda_bar**2
     delta_n = np.minimum(delta_n, 0.1)
 
-    constraint = Nd/(kappa*Np) + beta*Md/Mp + delta_n  #this is utilization must be <1
+    GL_utilization = Nd/(kappa*Np) + beta*Md/Mp + delta_n  #this is utilization must be <1
 
-    return constraint
+    return GL_utilization
 
 
 
@@ -167,7 +167,7 @@ def bucklingGL(d, t, Fz, Myy, tower_height, E, sigma_y, gamma_f=1.2, gamma_b=1.1
 
 def shellBucklingEurocode(d, t, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma_y, gamma_f=1.2, gamma_b=1.1):
     """
-    Estimate shell buckling constraint along tower.
+    Estimate shell buckling utilization along tower.
 
     Arguments:
     npt - number of locations at each node at which stress is evaluated.
@@ -183,13 +183,13 @@ def shellBucklingEurocode(d, t, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma
 
     Returns:
     z
-    an array of shell buckling constraints evaluted at (z[0] at npt locations,
-    z[0]+L_reinforced at npt locations, ...).
-    Each constraint must be <= 0 to avoid failure.
+    EU_utilization: - array of shell buckling utilizations evaluted at (z[0] at npt locations, \n
+                      z[0]+L_reinforced at npt locations, ...). \n
+                      Each utilization must be < 1 to avoid failure.
     """
 
     n = len(d)
-    constraint = np.zeros(n)
+    EU_utilization = np.zeros(n)
     sigma_z_sh=np.zeros(n)
     sigma_t_sh=np.zeros(n)
     tau_zt_sh=np.zeros(n)
@@ -211,14 +211,14 @@ def shellBucklingEurocode(d, t, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma
         sigma_t_shell = gamma_f*abs(sigma_t_shell)
         tau_zt_shell = gamma_f*abs(tau_zt_shell)
 
-        constraint[i] = _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z_shell, sigma_t_shell, tau_zt_shell, E[i], sigma_y[i]) #this is utilization must be <1
+        EU_utilization[i] = _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z_shell, sigma_t_shell, tau_zt_shell, E[i], sigma_y[i]) #this is utilization must be <1
 
         #make them into vectors
         sigma_z_sh[i]=sigma_z_shell
         sigma_t_sh[i]=sigma_t_shell
         tau_zt_sh[i]=tau_zt_shell
 
-    return constraint
+    return EU_utilization
 
 
 
@@ -365,7 +365,7 @@ def _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t, tau_z
     tau_zt - shear stress component (z, theta)
 
     Returns:
-    buckling_constraint, which must be <= 0 to avoid failure
+    EU_utilization, shell buckling utilization which must be < 1 to avoid failure
 
     """
 
@@ -484,15 +484,15 @@ def _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z, sigma_t, tau_z
     k_tau = 1.75 + 0.25*chi_tau
     k_i = (chi_z*chi_theta)**2
 
-    # buckling constraint
+    # shell buckling utilization
 
-    buckling_constraint = \
+    utilization = \
         (sigma_z/sigma_z_Rd)**k_z + \
         (sigma_t/sigma_t_Rd)**k_theta - \
         k_i*(sigma_z*sigma_t/sigma_z_Rd/sigma_t_Rd) + \
         (tau_zt/tau_zt_Rd)**k_tau
 
-    return buckling_constraint #this is utilization must be <1
+    return utilization #this is utilization must be <1
 
 
 

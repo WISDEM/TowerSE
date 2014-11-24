@@ -23,6 +23,7 @@ from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot,Instanc
 from commonse.utilities import sind, cosd, linspace_with_deriv, interp_with_deriv, hstack, vstack
 from commonse.csystem import DirectionVector
 from commonse.environment import WindBase, WaveBase, SoilBase
+from commonse.Material import Material
 from towerSupplement import fatigue, hoopStressEurocode, shellBucklingEurocode, \
     bucklingGL, vonMisesStressUtilization
 from akima import Akima
@@ -764,10 +765,10 @@ class TowerBase(Component):
 
     # geometry
     towerHeight = Float(iotype='in', units='m')
-    z = Array(iotype='in', desc='locations along unit tower')
-    d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
-    t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
-    L_reinforced = Array(iotype='in', units='m', desc='reinforcement positions for buckling')
+    z = Array(iotype='in', desc='Locations along unit tower')
+    d = Array(iotype='in', units='m', desc='Tower diameter at corresponding locations')
+    t = Array(iotype='in', units='m', desc='Shell thickness at corresponding locations')
+    L_reinforced = Array(iotype='in', units='m', desc='Reinforcement positions for buckling')
     yaw = Float(0.0, iotype='in', units='deg')
 
     # wind/wave loads
@@ -779,41 +780,43 @@ class TowerBase(Component):
     top_F = Array(iotype='in')
     top_M = Array(iotype='in')
     top_m = Float(iotype='in')
-    top_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia. order: (xx, yy, zz, xy, xz, yz)')
+    top_I = Array(iotype='in', units='kg*m**2', desc='Mass moments of inertia. order: (xx, yy, zz, xy, xz, yz)')
     top_cm = Array(iotype='in')
 
     # soil
-    k_soil = Array(iotype='in', desc='stiffness properties at base of foundation')
+    k_soil = Array(iotype='in', desc='Stiffness properties at base of foundation')
 
     # material properties
-    E = Float(210e9, iotype='in', units='N/m**2', desc='material modulus of elasticity')
-    G = Float(80.8e9, iotype='in', units='N/m**2', desc='material shear modulus')
-    rho = Float(8500.0, iotype='in', units='kg/m**3', desc='material density')
-    sigma_y = Float(450.0e6, iotype='in', units='N/m**2', desc='yield stress')
+    material = Instance(Material(matname='HeavySteel',E=2.1E11,G=8.08E10,rho=8500.,f_y=345.e6), iotype='in', desc='Material properties for the tower shell.')
+
+##    E = Float(210e9, iotype='in', units='N/m**2', desc='material modulus of elasticity')
+##    G = Float(80.8e9, iotype='in', units='N/m**2', desc='material shear modulus')
+##    rho = Float(8500.0, iotype='in', units='kg/m**3', desc='material density')
+##    sigma_y = Float(345.0e6, iotype='in', units='N/m**2', desc='yield stress')
 
     # safety factors
-    gamma_f = Float(1.35, iotype='in', desc='safety factor on loads')
-    gamma_m = Float(1.1, iotype='in', desc='safety factor on materials')
-    gamma_n = Float(1.0, iotype='in', desc='safety factor on consequence of failure')
-    gamma_b = Float(1.1, iotype='in', desc='buckling safety factor')
+    gamma_f = Float(1.35, iotype='in', desc='Safety factor on loads')
+    gamma_m = Float(1.1, iotype='in', desc='Safety factor on materials')
+    gamma_n = Float(1.0, iotype='in', desc='Safety factor on consequence of failure')
+    gamma_b = Float(1.1, iotype='in', desc='Buckling safety factor')
 
-    life = Float(20.0, iotype='in', desc='fatigue life of tower')
-    m_SN = Int(4, iotype='in', desc='slope of S/N curve')
-    DC = Float(80.0, iotype='in', desc='standard value of stress')
-    gamma_fatigue = Float(1.755, iotype='in', desc='total safety factor for fatigue')
+    life = Float(20.0, iotype='in', desc='Fatigue life of tower')
+    m_SN = Int(4, iotype='in', desc='Slope of S/N curve')
+    DC = Float(80.0, iotype='in', desc='Standard value of stress')
+    gamma_fatigue = Float(1.755, iotype='in', desc='Total safety factor for fatigue')
     z_DEL = Array(iotype='in')
     M_DEL = Array(iotype='in')
 
     # outputs
     mass = Float(iotype='out')
-    f1 = Float(iotype='out', units='Hz', desc='first natural frequency')
-    f2 = Float(iotype='out', units='Hz', desc='second natural frequency')
-    top_deflection = Float(iotype='out', units='m', desc='deflection of tower top in yaw-aligned +x direction')
-    stress = Array(iotype='out', units='N/m**2', desc='von Mises stress along tower on downwind side (yaw-aligned +x).  normalized by yield stress.  includes safety factors.')
+    f1 = Float(iotype='out', units='Hz', desc='First natural frequency')
+    f2 = Float(iotype='out', units='Hz', desc='Second natural frequency')
+    top_deflection = Float(iotype='out', units='m', desc='Deflection of tower top in yaw-aligned +x direction')
+    stress = Array(iotype='out', units='N/m**2', desc='Von Mises stress along tower on downwind side (yaw-aligned +x).  Normalized by yield stress.  Includes safety factors.')
     # z_buckling = Array(iotype='out', units='m', desc='z-locations along tower where shell buckling is evaluted')
-    shellBuckling = Array(iotype='out', desc='a shell buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
-    buckling = Array(iotype='out', desc='a global buckling constraint.  should be <= 0 for feasibility.  includes safety factors')
-    damage = Array(iotype='out', desc='fatigue damage at each tower section')
+    shellBuckling = Array(iotype='out', desc='Shell buckling utilization.  should be < 1 for feasibility.  Includes safety factors')
+    buckling = Array(iotype='out', desc='Global buckling utilization.  should be < 1 for feasibility.  Includes safety factors')
+    damage = Array(iotype='out', desc='Fatigue damage at each tower section')
 
 
     def aerohydroLoadsAtNodes(self):
@@ -889,7 +892,7 @@ class TowerWithpBEAM(TowerBase):
         loads = _pBEAM.Loads(nodes, Px, Py, Pz)
 
         # material properties
-        mat = _pBEAM.Material(self.E, self.G, self.rho)
+        mat = _pBEAM.Material(self.material.E, self.material.G, self.material.rho)
 
         # RNA properties
         top = _pBEAM.TipData(self.top_m, self.top_cm, self.top_I, self.top_F, self.top_M)
@@ -911,7 +914,7 @@ class TowerWithpBEAM(TowerBase):
         self.top_deflection = dx[-1]  # in yaw-aligned direction
 
         # axial stress (all stress evaluated on +x yaw side)
-        axial_stress = self.E*tower.axialStrain(nodes, d/2.0, 0.0*d, z)
+        axial_stress = self.material.E*tower.axialStrain(nodes, d/2.0, 0.0*d, z)
 
         # shear stress
         Vx, Vy, Fz, Mx, My, Tz = tower.shearAndBending()
@@ -926,16 +929,16 @@ class TowerWithpBEAM(TowerBase):
 
         # von mises stress
         self.stress = vonMisesStressUtilization(axial_stress, hoop_stress, shear_stress,
-            self.gamma_f*self.gamma_m*self.gamma_n, self.sigma_y)
+            self.gamma_f*self.gamma_m*self.gamma_n, self.material.f_y)
 
         # buckling
         self.shellBuckling = shellBucklingEurocode(d, t, axial_stress, hoop_stress, shear_stress,
-            self.L_reinforced, self.E*np.ones(nodes), self.sigma_y*np.ones(nodes),
+            self.L_reinforced, self.material.E*np.ones(nodes), self.material.f_y*np.ones(nodes),
             self.gamma_f, self.gamma_b)
 
         tower_height = self.z[-1] - self.z[0]
-        self.buckling = bucklingGL(d, t, Fz, My, tower_height, self.E*np.ones(nodes),
-            self.sigma_y*np.ones(nodes), self.gamma_f, self.gamma_b)
+        self.buckling = bucklingGL(d, t, Fz, My, tower_height, self.material.E*np.ones(nodes),
+            self.material.f_y*np.ones(nodes), self.gamma_f, self.gamma_b)
 
         # fatigue
         self.damage = self.fatigue()
@@ -1058,10 +1061,10 @@ class TowerWithFrame3DD(TowerBase):
         Jx = math.pi/2.0 * (ro**4 - ri**4)
         Iy = Jx/2.0
         Iz = Jx/2.0
-        E = self.E*np.ones(n-1)
-        G = self.G*np.ones(n-1)
+        E = self.material.E*np.ones(n-1)
+        G = self.material.G*np.ones(n-1)
         roll = np.zeros(n-1)
-        density = self.rho*np.ones(n-1)
+        density = self.material.rho*np.ones(n-1)
 
         elements = frame3dd.ElementData(element, N1, N2, Ax, Asy, Asz, Jx, Iy, Iz, E, G, roll, density)
 
@@ -1208,18 +1211,18 @@ class TowerWithFrame3DD(TowerBase):
 
         # von mises stress
         self.stress = vonMisesStressUtilization(axial_stress, hoop_stress, shear_stress,
-            self.gamma_f*self.gamma_m*self.gamma_n, self.sigma_y)
+            self.gamma_f*self.gamma_m*self.gamma_n, self.material.f_y)
 
         # buckling
         junk=np.ones(nodes.node.size)
         # global buckling changed d and t to self.d and self.t
         self.shellBuckling = shellBucklingEurocode(self.d, self.t, axial_stress, hoop_stress, shear_stress,
-            self.L_reinforced, self.E*junk, self.sigma_y*junk,
+            self.L_reinforced, self.material.E*junk, self.material.f_y*junk,
             self.gamma_f, self.gamma_b)
 
         tower_height = self.z[-1] - self.z[0]
-        self.buckling = bucklingGL(self.d, self.t, Fz, Myy, tower_height, self.E*junk,
-            self.sigma_y*junk, self.gamma_f, self.gamma_b)
+        self.buckling = bucklingGL(self.d, self.t, Fz, Myy, tower_height, self.material.E*junk,
+            self.material.f_y*junk, self.gamma_f, self.gamma_b)
 
         # fatigue
         self.damage = self.fatigue()
@@ -1291,10 +1294,11 @@ class TowerSE(Assembly):
     nac_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia of nacelle about its center of mass')
 
     # material properties
-    E = Float(210e9, iotype='in', units='N/m**2', desc='material modulus of elasticity')
-    G = Float(80.8e9, iotype='in', units='N/m**2', desc='material shear modulus')
-    rho = Float(8500.0, iotype='in', units='kg/m**3', desc='material density')
-    sigma_y = Float(450.0e6, iotype='in', units='N/m**2', desc='yield stress')
+    material = Instance(Material(matname='HeavySteel',E=2.1E11,G=8.08E10,rho=8500.,f_y=345.e6), iotype='in',desc='Material properties for the tower shell.')
+##    E = Float(210e9, iotype='in', units='N/m**2', desc='material modulus of elasticity')
+##    G = Float(80.8e9, iotype='in', units='N/m**2', desc='material shear modulus')
+##    rho = Float(8500.0, iotype='in', units='kg/m**3', desc='material density')
+##    sigma_y = Float(450.0e6, iotype='in', units='N/m**2', desc='yield stress')
 
     # safety factors
     gamma_f = Float(1.35, iotype='in', desc='safety factor on loads')
@@ -1491,10 +1495,10 @@ class TowerSE(Assembly):
         self.connect('rotorloads1.top_M', 'tower1.top_M')
         self.connect('yaw', 'tower1.yaw')
         self.connect('g', 'tower1.g')
-        self.connect('E', 'tower1.E')
-        self.connect('G', 'tower1.G')
-        self.connect('rho', 'tower1.rho')
-        self.connect('sigma_y', 'tower1.sigma_y')
+        self.connect('material', 'tower1.material')
+##        self.connect('G', 'tower1.G')
+##        self.connect('rho', 'tower1.rho')
+##        self.connect('sigma_y', 'tower1.sigma_y')
         self.connect('gamma_f', 'tower1.gamma_f')
         self.connect('gamma_m', 'tower1.gamma_m')
         self.connect('gamma_n', 'tower1.gamma_n')
@@ -1522,10 +1526,11 @@ class TowerSE(Assembly):
         self.connect('rotorloads2.top_M', 'tower2.top_M')
         self.connect('yaw', 'tower2.yaw')
         self.connect('g', 'tower2.g')
-        self.connect('E', 'tower2.E')
-        self.connect('G', 'tower2.G')
-        self.connect('rho', 'tower2.rho')
-        self.connect('sigma_y', 'tower2.sigma_y')
+        self.connect('material', 'tower2.material')
+##        self.connect('E', 'tower2.E')
+##        self.connect('G', 'tower2.G')
+##        self.connect('rho', 'tower2.rho')
+##        self.connect('sigma_y', 'tower2.sigma_y')
         self.connect('gamma_f', 'tower2.gamma_f')
         self.connect('gamma_m', 'tower2.gamma_m')
         self.connect('gamma_n', 'tower2.gamma_n')
