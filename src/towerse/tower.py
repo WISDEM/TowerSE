@@ -1348,13 +1348,13 @@ if __name__ == '__main__':
     # ---------------
 
     # --- loading case 1: max Thrust ---
-    tower.wind_Uref1 = 16.030
+    tower.wind_Uref1 = 11.73732
     tower.top1_F = np.array([1284744.19620519, 0., -2914124.84400512]) #Array(iotype='in', units='N', desc='Aerodynamic forces')
     tower.top1_M = np.array([3963732.76208099, -2275104.79420872, -346781.68192839]) #Array(iotype='in', units='N*m', desc='Aerodynamic moments')
     # ---------------
 
     # --- loading case 2: max wind speed ---
-    tower.wind_Uref2 = 67.89
+    tower.wind_Uref2 = 70.0
     tower.top2_F = np.array([930198.60063279, 0., -2883106.12368949]) #Array(iotype='in', units='N', desc='Aerodynamic forces')
     tower.top2_M = np.array([-1683669.22411597, -2522475.34625363, 147301.97023764]) #Array(iotype='in', units='N*m', desc='Aerodynamic moments')
     # ---------------
