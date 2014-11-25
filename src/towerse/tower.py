@@ -1333,10 +1333,6 @@ if __name__ == '__main__':
     tower.top_m = 285598.8 #Float(iotype='in', units='m', desc='RNA (tower top) mass')
     tower.top_I = np.array([1.14930678e+08, 2.20354030e+07, 1.87597425e+07, 0.00000000e+00, 5.03710467e+05, 0.00000000e+00]) #Array(iotype='in', units='kg*m**2', desc='mass moments of inertia. order: (xx, yy, zz, xy, xz, yz)')
     tower.top_cm = np.array([-1.13197635, 0., 0.50875268]) #Array(iotype='in', units='m', desc='RNA center of mass')
-    tower.top1_F = np.array([1284744.19620519, 0., -2914124.84400512]) #Array(iotype='in', units='N', desc='Aerodynamic forces')
-    tower.top1_M = np.array([3963732.76208099, -2275104.79420872, -346781.68192839]) #Array(iotype='in', units='N*m', desc='Aerodynamic moments')
-    tower.top2_F = np.array([930198.60063279, 0., -2883106.12368949]) #Array(iotype='in', units='N', desc='Aerodynamic forces')
-    tower.top2_M = np.array([-1683669.22411597, -2522475.34625363, 147301.97023764]) #Array(iotype='in', units='N*m', desc='Aerodynamic moments')
     # -----------
 
     # --- wind ---
@@ -1353,14 +1349,14 @@ if __name__ == '__main__':
 
     # --- loading case 1: max Thrust ---
     tower.wind_Uref1 = 16.030
-    tower.rotorF1 = [1.3295e6, 0.0, 0.0]
-    tower.rotorM1 = [6.2829e6, 0.0, 0.0]
+    tower.top1_F = np.array([1284744.19620519, 0., -2914124.84400512]) #Array(iotype='in', units='N', desc='Aerodynamic forces')
+    tower.top1_M = np.array([3963732.76208099, -2275104.79420872, -346781.68192839]) #Array(iotype='in', units='N*m', desc='Aerodynamic moments')
     # ---------------
 
     # --- loading case 2: max wind speed ---
     tower.wind_Uref2 = 67.89
-    tower.rotorF2 = [1.1770e6, 0.0, 0.0]
-    tower.rotorM2 = [1.5730e6, 0.0, 0.0]
+    tower.top2_F = np.array([930198.60063279, 0., -2883106.12368949]) #Array(iotype='in', units='N', desc='Aerodynamic forces')
+    tower.top2_M = np.array([-1683669.22411597, -2522475.34625363, 147301.97023764]) #Array(iotype='in', units='N*m', desc='Aerodynamic moments')
     # ---------------
 
 	# --- safety factors ---
