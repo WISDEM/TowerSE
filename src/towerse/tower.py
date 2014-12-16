@@ -453,21 +453,21 @@ class TowerDiscretization(Component):
 
         return inputs, outputs
 
-
-    def provideJ(self):
-
-        n = len(self.z_node)
-        m = len(self.z)
-        # n2 = len(self.z_reinforced)
-
-        dzn = hstack([self.z_node/self.towerHeight, self.dznode_dz, np.zeros((n, 2*m))])
-        ddn = hstack([np.zeros(n), self.ddnode_dz, self.ddnode_dd, np.zeros((n, m))])
-        dtn = hstack([np.zeros(n), self.dtnode_dz, np.zeros((n, m)), self.dtnode_dt])
-        # dzr = hstack([self.z_reinforced/self.towerHeight, self.dzr_dz, np.zeros((n2, 2*m))])
-
-        J = np.vstack([dzn, ddn, dtn])
-
-        return J
+##COmmenting next one as it does not work with Monopile
+##    def provideJ(self):
+##
+##        n = len(self.z_node)
+##        m = len(self.z)
+##        # n2 = len(self.z_reinforced)
+##
+##        dzn = hstack([self.z_node/self.towerHeight, self.dznode_dz, np.zeros((n, 2*m))])
+##        ddn = hstack([np.zeros(n), self.ddnode_dz, self.ddnode_dd, np.zeros((n, m))])
+##        dtn = hstack([np.zeros(n), self.dtnode_dz, np.zeros((n, m)), self.dtnode_dt])
+##        # dzr = hstack([self.z_reinforced/self.towerHeight, self.dzr_dz, np.zeros((n2, 2*m))])
+##
+##        J = np.vstack([dzn, ddn, dtn])
+##
+##        return J
 
 
 class GeometricConstraints(Component):
