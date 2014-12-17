@@ -10,16 +10,17 @@ HISTORY:  2012 created
           -7/2014:  Bugs found in the call to shellBucklingEurocode from towerwithFrame3DD. Fixed.
                     Also set_as_top added.
           -10/2014: Merged back with some changes Andrew did on his end.
+          -12/2014: fixed some errors from the merge (redundant drag calc).  pep8 compliance.  removed several unneccesary variables and imports (including set_as_top)
 To DO:   1.FIX treatment of L_reinorced between tower.py and tower_supplement.py, for now it works with an array with all same elements. \n
          2.Get a better handle of the RNA weight effect on the moment at the top, to be conservative if desired when upwind. For now that moment is ignored. \n
  """
 
 import math
 import numpy as np
-from openmdao.main.api import VariableTree, Component, Assembly, set_as_top
-from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot,Instance, Bool
+from openmdao.main.api import VariableTree, Component, Assembly
+from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot, Instance
 
-from commonse.utilities import sind, cosd, linspace_with_deriv, interp_with_deriv, hstack, vstack
+from commonse.utilities import sind, cosd, linspace_with_deriv, interp_with_deriv, hstack
 from commonse.csystem import DirectionVector
 from commonse.environment import WindBase, WaveBase, SoilBase
 from commonse.Material import Material
@@ -90,7 +91,7 @@ class AeroLoads(VariableTree):
     Px0= Float(units='N/m', desc='Distributed load at z=0 MSL')
     Py0= Float(units='N/m', desc='Distributed load at z=0 MSL')
     Pz0= Float(units='N/m', desc='Distributed load at z=0 MSL')
-    q0 =  Float(units='N/m**2', desc='dynamic pressure at z=0 MSL')
+    q0 = Float(units='N/m**2', desc='dynamic pressure at z=0 MSL')
     beta0 = Float(units='deg', desc='wind/wave angle relative to inertia c.s.')
 
 # -----------------
@@ -110,8 +111,7 @@ class TowerWindDrag(Component):
     beta = Array(iotype='in', units='deg', desc='corresponding wind angles relative to inertial coordinate system')
     rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
     mu = Float(1.7934e-5, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of air')
-
-    cd_usr =Float(iotype='in', units=None, desc='User input drag coefficient to override Reynolds number based one')
+    cd_usr = Float(iotype='in', desc='User input drag coefficient to override Reynolds number based one')
 
     # out
     windLoads = VarTree(AeroLoads(), iotype='out', desc='wind loads in inertial coordinate system')
@@ -131,22 +131,6 @@ class TowerWindDrag(Component):
         q = 0.5*rho*U**2
 
         # Reynolds number and drag
-        Re = rho*U*d/mu
-        cd, dcd_dRe = cylinderDrag(Re)
-
-        # Add possiblity of external Cd -RRD
-        if self.cd_usr:
-            cd = self.cd_usr
-            Re = 1.0
-            dcd_dRe = 0.0
-        Fp = q*cd*d
-
-
-        # components of distributed loads
-        Px = Fp*cosd(beta)
-        Py = Fp*sind(beta)
-        Pz = 0.*Fp
-
         if self.cd_usr:
             cd = self.cd_usr
             Re = 1.0
@@ -160,7 +144,6 @@ class TowerWindDrag(Component):
         Px = Fp*cosd(beta)
         Py = Fp*sind(beta)
         Pz = 0*Fp
-
 
         # pack data
         self.windLoads.Px = Px
@@ -229,7 +212,7 @@ class TowerWaveDrag(Component):
     rho = Float(1027.0, iotype='in', units='kg/m**3', desc='water density')
     mu = Float(1.3351e-3, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of water')
     cm = Float(2.0, iotype='in', desc='mass coefficient')
-    cd_usr =Float(iotype='in', units=None, desc='User input drag coefficient to override Reynolds number based one')
+    cd_usr = Float(iotype='in', desc='User input drag coefficient to override Reynolds number based one')
 
     # out
     waveLoads = VarTree(AeroLoads(), iotype='out', desc='wave loads in inertial coordinate system')
@@ -255,13 +238,12 @@ class TowerWaveDrag(Component):
         q0= 0.5*rho*U0**2
 
         # Reynolds number and drag
-        Re = rho*U*d/mu
-        cd, dcd_dRe = cylinderDrag(Re)
-
-       # Add possiblity of external Cd -RRD
         if self.cd_usr:
-            cd = self.cd_usr*np.ones(cd.size)
+            cd = self.cd_usr*np.ones_like(self.d)
             dcd_dRe = 0.0
+        else:
+            Re = rho*U*d/mu
+            cd, dcd_dRe = cylinderDrag(Re)
 
         d = self.d
         mu = self.mu
@@ -273,17 +255,17 @@ class TowerWaveDrag(Component):
         Fp = Fi + Fd
 
         #FORCES [N/m] AT z=0 m
-        idx0=np.abs(zrel).argmin()  #closest index to z=0, used to find d at z=0
-        d0=d[idx0]  #initialize
-        cd0=cd[idx0]#initialize
-        if (zrel[idx0]<0.) and (idx0< (zrel.size-1)):       #point below water
-            d0=np.mean(d[idx0:idx0+2])
-            cd0=np.mean(cd[idx0:idx0+2])
-        elif (zrel[idx0]>0.) and (idx0>0):     #point above water
-            d0=np.mean(d[idx0-1:idx0+1])
-            cd0=np.mean(cd[idx0-1:idx0+1])
+        idx0 = np.abs(zrel).argmin()  # closest index to z=0, used to find d at z=0
+        d0 = d[idx0]  # initialize
+        cd0 = cd[idx0]  # initialize
+        if (zrel[idx0]<0.) and (idx0< (zrel.size-1)):       # point below water
+            d0 = np.mean(d[idx0:idx0+2])
+            cd0 = np.mean(cd[idx0:idx0+2])
+        elif (zrel[idx0]>0.) and (idx0>0):     # point above water
+            d0 = np.mean(d[idx0-1:idx0+1])
+            cd0 = np.mean(cd[idx0-1:idx0+1])
         Fi0 = rho*self.cm*math.pi/4.0*d0**2*self.A0  # Morrison's equation
-        Fd0= q0*cd0*d0
+        Fd0 = q0*cd0*d0
         Fp0 = Fi0 + Fd0
 
         # components of distributed loads
@@ -545,7 +527,7 @@ class TowerBase(Component):
     k_soil = Array(iotype='in', desc='Stiffness properties at base of foundation')
 
     # material properties
-    material = Instance(Material(matname='HeavySteel',E=2.1E11,G=8.08E10,rho=8500.,fy=345.e6), iotype='in', desc='Material properties for the tower shell.')
+    material = Instance(Material(matname='HeavySteel', E=2.1E11, G=8.08E10, rho=8500., fy=345.e6), iotype='in', desc='Material properties for the tower shell.')
 
 ##    E = Float(210e9, iotype='in', units='N/m**2', desc='material modulus of elasticity')
 ##    G = Float(80.8e9, iotype='in', units='N/m**2', desc='material shear modulus')
@@ -830,9 +812,9 @@ class TowerWithFrame3DD(TowerBase):
 
         # ------ options ------------
 
-        shear = self.FrameAuxIns.sh_fg        #default= True or 1. 1=include shear deformation
-        geom = self.FrameAuxIns.geo_fg        #default=False  or 0 # 1=include geometric stiffness
-        dx = self.FrameAuxIns.deltaz          #default =5. x-axis increment for internal forces
+        shear = self.FrameAuxIns.sh_fg        # default= True or 1. 1=include shear deformation
+        geom = self.FrameAuxIns.geo_fg        # default=False  or 0 # 1=include geometric stiffness
+        dx = self.FrameAuxIns.deltaz          # default =5. x-axis increment for internal forces
         options = frame3dd.Options(shear, geom, dx)
 
         # -----------------------------------
@@ -971,15 +953,15 @@ class TowerWithFrame3DD(TowerBase):
             self.gamma_f*self.gamma_m*self.gamma_n, self.material.fy)
 
         # buckling
-        junk=np.ones(nodes.node.size)
+        ones_array = np.ones(nodes.node.size)
         # global buckling changed d and t to self.d and self.t
         self.shellBuckling = shellBucklingEurocode(self.d, self.t, axial_stress, hoop_stress, shear_stress,
-            self.L_reinforced, self.material.E*junk, self.material.fy*junk,
+            self.L_reinforced, self.material.E*ones_array, self.material.fy*ones_array,
             self.gamma_f, self.gamma_b)
 
         tower_height = self.z[-1] - self.z[0]
-        self.buckling = bucklingGL(self.d, self.t, Fz, Myy, tower_height, self.material.E*junk,
-            self.material.fy*junk, self.gamma_f, self.gamma_b)
+        self.buckling = bucklingGL(self.d, self.t, Fz, Myy, tower_height, self.material.E*ones_array,
+            self.material.fy*ones_array, self.gamma_f, self.gamma_b)
 
         # fatigue
         self.damage = self.fatigue()
@@ -1024,12 +1006,12 @@ class TowerSE(Assembly):
     wind_Uref2 = Float(iotype='in', units='m/s', desc='reference wind speed (usually at hub height)')
     wind_zref = Float(iotype='in', units='m', desc='corresponding reference height')
     wind_z0 = Float(0.0, iotype='in', units='m', desc='bottom of wind profile (height of ground/sea)')
-    wind_cd= Float(      iotype='in', desc='Cd coefficient, if left blan it will be calculated based on cylinder Re ')  #-RRD
+    wind_cd= Float(iotype='in', desc='Cd coefficient, if left blank it will be calculated based on cylinder Re')  # -RRD
 
     wave_rho = Float(1027.0, iotype='in', units='kg/m**3', desc='water density')
     wave_mu = Float(1.3351e-3, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of water')
     wave_cm = Float(2.0, iotype='in', desc='mass coefficient')
-    wave_cd= Float(      iotype='in', desc='Cd coefficient, if left blan it will be calculated based on cylinder Re ') #-RRD
+    wave_cd= Float(iotype='in', desc='Cd coefficient, if left blank it will be calculated based on cylinder Re')  # -RRD
 
     g = Float(9.81, iotype='in', units='m/s**2', desc='acceleration of gravity')
 
@@ -1038,7 +1020,7 @@ class TowerSE(Assembly):
     min_taper = Float(0.4, iotype='in', desc='minimum allowable taper ratio from tower top to tower bottom')
 
     # material properties
-    material = Instance(Material(matname='HeavySteel',E=2.1E11,G=8.08E10,rho=8500.,fy=345.e6), iotype='in',desc='Material properties for the tower shell.')
+    material = Instance(Material(matname='HeavySteel', E=2.1E11, G=8.08E10, rho=8500., fy=345.e6), iotype='in', desc='Material properties for the tower shell.')
 ##    E = Float(210e9, iotype='in', units='N/m**2', desc='material modulus of elasticity')
 ##    G = Float(80.8e9, iotype='in', units='N/m**2', desc='material shear modulus')
 ##    rho = Float(8500.0, iotype='in', units='kg/m**3', desc='material density')
@@ -1143,7 +1125,7 @@ class TowerSE(Assembly):
         self.connect('wind_rho', 'windLoads1.rho')
         self.connect('wind_mu', 'windLoads1.mu')
 
-        self.connect('wind_cd', 'windLoads1.cd_usr')#-RRD
+        self.connect('wind_cd', 'windLoads1.cd_usr')  # -RRD
         self.connect('geometry.z_node', 'windLoads1.z')
         self.connect('geometry.d_node', 'windLoads1.d')
 
@@ -1153,7 +1135,7 @@ class TowerSE(Assembly):
         self.connect('wind_rho', 'windLoads2.rho')
         self.connect('wind_mu', 'windLoads2.mu')
 
-        self.connect('wind_cd', 'windLoads2.cd_usr')#-RRD
+        self.connect('wind_cd', 'windLoads2.cd_usr')  # -RRD
         self.connect('geometry.z_node', 'windLoads2.z')
         self.connect('geometry.d_node', 'windLoads2.d')
 
@@ -1167,7 +1149,7 @@ class TowerSE(Assembly):
         self.connect('wave_rho', 'waveLoads1.rho')
         self.connect('wave_mu', 'waveLoads1.mu')
         self.connect('wave_cm', 'waveLoads1.cm')
-        self.connect('wave_cd', 'waveLoads1.cd_usr')#-RRD
+        self.connect('wave_cd', 'waveLoads1.cd_usr')  # -RRD
         self.connect('geometry.z_node', 'waveLoads1.z')
         self.connect('geometry.d_node', 'waveLoads1.d')
 
@@ -1182,7 +1164,7 @@ class TowerSE(Assembly):
         self.connect('wave_rho', 'waveLoads2.rho')
         self.connect('wave_mu', 'waveLoads2.mu')
         self.connect('wave_cm', 'waveLoads2.cm')
-        self.connect('wave_cd', 'waveLoads2.cd_usr') #-RRD
+        self.connect('wave_cd', 'waveLoads2.cd_usr')  # -RRD
         self.connect('geometry.z_node', 'waveLoads2.z')
         self.connect('geometry.d_node', 'waveLoads2.d')
 
@@ -1283,9 +1265,8 @@ if __name__ == '__main__':
 
     # --- tower setup ------
     from commonse.environment import PowerWind, TowerSoil
-    from math import pi
 
-    tower = set_as_top(TowerSE())
+    tower = TowerSE()
 
 
     # ---- tower ------
@@ -1305,8 +1286,7 @@ if __name__ == '__main__':
     tower.d = [6.0, 4.935, 3.87]
     tower.t = [0.027*1.3, 0.023*1.3, 0.019*1.3]
     tower.n = [10, 10]
-    tower.n_reinforced = 3
-    tower.L_reinforced=np.array([30.])#,30.,30.]) #[m] buckling length
+    tower.L_reinforced = np.array([30.])  # ,30.,30.]) #[m] buckling length
     tower.yaw = 0.0
     tower.tilt = 5.0
     # ---------------
@@ -1330,9 +1310,9 @@ if __name__ == '__main__':
     # ---------------'''
 
     # --- rna ---
-    tower.top_m = 285598.8 #Float(iotype='in', units='m', desc='RNA (tower top) mass')
-    tower.top_I = np.array([1.14930678e+08, 2.20354030e+07, 1.87597425e+07, 0.00000000e+00, 5.03710467e+05, 0.00000000e+00]) #Array(iotype='in', units='kg*m**2', desc='mass moments of inertia. order: (xx, yy, zz, xy, xz, yz)')
-    tower.top_cm = np.array([-1.13197635, 0., 0.50875268]) #Array(iotype='in', units='m', desc='RNA center of mass')
+    tower.top_m = 285598.8  # Float(iotype='in', units='m', desc='RNA (tower top) mass')
+    tower.top_I = np.array([1.14930678e+08, 2.20354030e+07, 1.87597425e+07, 0.00000000e+00, 5.03710467e+05, 0.00000000e+00])  # Array(iotype='in', units='kg*m**2', desc='mass moments of inertia. order: (xx, yy, zz, xy, xz, yz)')
+    tower.top_cm = np.array([-1.13197635, 0., 0.50875268])  # Array(iotype='in', units='m', desc='RNA center of mass')
     # -----------
 
     # --- wind ---
@@ -1349,25 +1329,25 @@ if __name__ == '__main__':
 
     # --- loading case 1: max Thrust ---
     tower.wind_Uref1 = 11.73732
-    tower.top1_F = np.array([1284744.19620519, 0., -2914124.84400512]) #Array(iotype='in', units='N', desc='Aerodynamic forces')
-    tower.top1_M = np.array([3963732.76208099, -2275104.79420872, -346781.68192839]) #Array(iotype='in', units='N*m', desc='Aerodynamic moments')
+    tower.top1_F = np.array([1284744.19620519, 0., -2914124.84400512])  # Array(iotype='in', units='N', desc='Aerodynamic forces')
+    tower.top1_M = np.array([3963732.76208099, -2275104.79420872, -346781.68192839])  # Array(iotype='in', units='N*m', desc='Aerodynamic moments')
     # ---------------
 
     # --- loading case 2: max wind speed ---
     tower.wind_Uref2 = 70.0
-    tower.top2_F = np.array([930198.60063279, 0., -2883106.12368949]) #Array(iotype='in', units='N', desc='Aerodynamic forces')
-    tower.top2_M = np.array([-1683669.22411597, -2522475.34625363, 147301.97023764]) #Array(iotype='in', units='N*m', desc='Aerodynamic moments')
+    tower.top2_F = np.array([930198.60063279, 0., -2883106.12368949])  # Array(iotype='in', units='N', desc='Aerodynamic forces')
+    tower.top2_M = np.array([-1683669.22411597, -2522475.34625363, 147301.97023764])  # Array(iotype='in', units='N*m', desc='Aerodynamic moments')
     # ---------------
 
-	# --- safety factors ---
+    # --- safety factors ---
     tower.gamma_f = 1.35
     tower.gamma_m = 1.3
     tower.gamma_n = 1.0
     tower.gamma_b = 1.1
     # ---------------
 
-# fatigue
-    tower.z_DEL = np.array([0.000, 1.327, 3.982, 6.636, 9.291, 11.945, 14.600, 17.255, 19.909, 22.564, 25.218, 27.873, 30.527, 33.182, 35.836, 38.491, 41.145, 43.800, 46.455, 49.109, 51.764, 54.418, 57.073, 59.727, 62.382, 65.036, 67.691, 70.345, 73.000, 75.655, 78.309, 80.964, 83.618, 86.273, 87.600])
+    # --- fatigue ---
+    tower.z_DEL = 1.0/87.6*np.array([0.000, 1.327, 3.982, 6.636, 9.291, 11.945, 14.600, 17.255, 19.909, 22.564, 25.218, 27.873, 30.527, 33.182, 35.836, 38.491, 41.145, 43.800, 46.455, 49.109, 51.764, 54.418, 57.073, 59.727, 62.382, 65.036, 67.691, 70.345, 73.000, 75.655, 78.309, 80.964, 83.618, 86.273, 87.600])
     tower.M_DEL = 1e3*np.array([8.2940E+003, 8.1518E+003, 7.8831E+003, 7.6099E+003, 7.3359E+003, 7.0577E+003, 6.7821E+003, 6.5119E+003, 6.2391E+003, 5.9707E+003, 5.7070E+003, 5.4500E+003, 5.2015E+003, 4.9588E+003, 4.7202E+003, 4.4884E+003, 4.2577E+003, 4.0246E+003, 3.7942E+003, 3.5664E+003, 3.3406E+003, 3.1184E+003, 2.8977E+003, 2.6811E+003, 2.4719E+003, 2.2663E+003, 2.0673E+003, 1.8769E+003, 1.7017E+003, 1.5479E+003, 1.4207E+003, 1.3304E+003, 1.2780E+003, 1.2673E+003, 1.2761E+003])
     tower.gamma_fatigue = 1.35*1.3*1.0
     tower.life = 20.0
