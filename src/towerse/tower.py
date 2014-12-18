@@ -20,7 +20,7 @@ import numpy as np
 from openmdao.main.api import VariableTree, Component, Assembly
 from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot, Instance
 
-from commonse.utilities import sind, cosd, linspace_with_deriv, interp_with_deriv, hstack
+from commonse.utilities import sind, cosd, linspace_with_deriv, interp_with_deriv, hstack, vstack
 from commonse.csystem import DirectionVector
 from commonse.environment import WindBase, WaveBase, SoilBase
 from commonse.Material import Material
@@ -397,10 +397,9 @@ class TowerDiscretization(Component):
         self.ddnode_dz = ddnode_dz + np.dot(ddnode_dznode, self.dznode_dz)
         self.dtnode_dz = dtnode_dz + np.dot(dtnode_dznode, self.dznode_dz)
 
-        # TODO: redo gradients for L_reinforced, although it probably won't ever change
 
-        # reinforcement distances
-        self.L_reinforced_node = self.L_reinforced*np.ones_like(self.z_node)
+        # reinforcement distances (assumed not to change during optimization---no gradients are derived for Lreinforced)
+        self.L_reinforced_node = np.interp(self.z_node, self.z, self.L_reinforced)
 
         # self.z_reinforced, dzr_dz0, dzr_dzend = linspace_with_deriv(self.z[0], self.z[-1], self.n_reinforced+1)
         # self.dzr_dz = np.zeros((len(self.z_reinforced), n2))
@@ -414,23 +413,34 @@ class TowerDiscretization(Component):
         # self.z_reinforced *= towerHt
         # self.dzr_dz *= towerHt
 
-        # TODO: redo gradients for monopile
+        self.z_node_save = self.z_node
+
         if self.monopileHeight > 0:
             z_monopile = np.linspace(self.z[0] - self.monopileHeight, self.z[0], self.n_monopile)
             d_monopile = self.d_monopile * np.ones_like(z_monopile)
             t_monopile = self.t_monopile * np.ones_like(z_monopile)
-            L_monopile = self.L_reinforced * np.ones_like(z_monopile)
+            # L_monopile = self.L_reinforced * np.ones_like(z_monopile)
 
             self.z_node = np.concatenate([z_monopile[:-1], self.z_node])
             self.d_node = np.concatenate([d_monopile[:-1], self.d_node])
             self.t_node = np.concatenate([t_monopile[:-1], self.t_node])
-            self.L_reinforced_node = np.concatenate([L_monopile[:-1], self.L_reinforced_node])
+            self.L_reinforced_node = np.interp(self.z_node, self.z, self.L_reinforced)
+            # self.L_reinforced_node = np.concatenate([L_monopile[:-1], self.L_reinforced_node])
             # self.z_reinforced = np.concatenate([[z_monopile[0]], self.z_reinforced])
+
+            nprev = len(self.z_node_save)
+            self.dznode_dmonoHeight = np.concatenate([np.linspace(-1, 0, self.n_monopile)[:-1], np.zeros(nprev)])
+            self.dzmp_dz0 = np.ones(len(z_monopile)-1)
+            self.ddnode_ddmono = np.concatenate([np.ones(len(z_monopile)-1), np.zeros(nprev)])
+            self.dtnode_dtmono = np.concatenate([np.ones(len(z_monopile)-1), np.zeros(nprev)])
 
 
     def list_deriv_vars(self):
 
-        inputs = ('towerHeight', 'z', 'd', 't')
+        if self.monopileHeight > 0:
+            inputs = ('towerHeight', 'z', 'd', 't', 'monopileHeight', 'd_monopile', 't_monopile')
+        else:
+            inputs = ('towerHeight', 'z', 'd', 't')
         outputs = ('z_node', 'd_node', 't_node')  # , 'z_reinforced')
 
         return inputs, outputs
@@ -438,14 +448,29 @@ class TowerDiscretization(Component):
 
     def provideJ(self):
 
-        n = len(self.z_node)
+        n = len(self.z_node_save)
         m = len(self.z)
         # n2 = len(self.z_reinforced)
 
-        dzn = hstack([self.z_node/self.towerHeight, self.dznode_dz, np.zeros((n, 2*m))])
+        dzn = hstack([self.z_node_save/self.towerHeight, self.dznode_dz, np.zeros((n, 2*m))])
         ddn = hstack([np.zeros(n), self.ddnode_dz, self.ddnode_dd, np.zeros((n, m))])
         dtn = hstack([np.zeros(n), self.dtnode_dz, np.zeros((n, m)), self.dtnode_dt])
-        # dzr = hstack([self.z_reinforced/self.towerHeight, self.dzr_dz, np.zeros((n2, 2*m))])
+
+        if self.monopileHeight > 0:
+            nfull = len(self.z_node)
+
+            dzmp = np.zeros((nfull-n, 1 + 3*m))
+            dzmp[:, 1] = self.dzmp_dz0
+
+            dzn = vstack([dzmp, dzn])
+            ddn = vstack([np.zeros((nfull-n, 1 + 3*m)), ddn])
+            dtn = vstack([np.zeros((nfull-n, 1 + 3*m)), dtn])
+
+
+            dzn = hstack([dzn, self.dznode_dmonoHeight, np.zeros((nfull, 2))])
+            ddn = hstack([ddn, np.zeros((nfull, 1)), self.ddnode_ddmono, np.zeros((nfull, 1))])
+            dtn = hstack([dtn, np.zeros((nfull, 2)), self.dtnode_dtmono])
+
 
         J = np.vstack([dzn, ddn, dtn])
 
@@ -1286,7 +1311,7 @@ if __name__ == '__main__':
     tower.d = [6.0, 4.935, 3.87]
     tower.t = [0.027*1.3, 0.023*1.3, 0.019*1.3]
     tower.n = [10, 10]
-    tower.L_reinforced = np.array([30.])  # ,30.,30.]) #[m] buckling length
+    tower.L_reinforced = np.array([30., 30., 30.])  # [m] buckling length
     tower.yaw = 0.0
     tower.tilt = 5.0
     # ---------------
@@ -1347,7 +1372,7 @@ if __name__ == '__main__':
     # ---------------
 
     # --- fatigue ---
-    tower.z_DEL = 1.0/87.6*np.array([0.000, 1.327, 3.982, 6.636, 9.291, 11.945, 14.600, 17.255, 19.909, 22.564, 25.218, 27.873, 30.527, 33.182, 35.836, 38.491, 41.145, 43.800, 46.455, 49.109, 51.764, 54.418, 57.073, 59.727, 62.382, 65.036, 67.691, 70.345, 73.000, 75.655, 78.309, 80.964, 83.618, 86.273, 87.600])
+    tower.z_DEL = np.array([0.000, 1.327, 3.982, 6.636, 9.291, 11.945, 14.600, 17.255, 19.909, 22.564, 25.218, 27.873, 30.527, 33.182, 35.836, 38.491, 41.145, 43.800, 46.455, 49.109, 51.764, 54.418, 57.073, 59.727, 62.382, 65.036, 67.691, 70.345, 73.000, 75.655, 78.309, 80.964, 83.618, 86.273, 87.600])
     tower.M_DEL = 1e3*np.array([8.2940E+003, 8.1518E+003, 7.8831E+003, 7.6099E+003, 7.3359E+003, 7.0577E+003, 6.7821E+003, 6.5119E+003, 6.2391E+003, 5.9707E+003, 5.7070E+003, 5.4500E+003, 5.2015E+003, 4.9588E+003, 4.7202E+003, 4.4884E+003, 4.2577E+003, 4.0246E+003, 3.7942E+003, 3.5664E+003, 3.3406E+003, 3.1184E+003, 2.8977E+003, 2.6811E+003, 2.4719E+003, 2.2663E+003, 2.0673E+003, 1.8769E+003, 1.7017E+003, 1.5479E+003, 1.4207E+003, 1.3304E+003, 1.2780E+003, 1.2673E+003, 1.2761E+003])
     tower.gamma_fatigue = 1.35*1.3*1.0
     tower.life = 20.0
