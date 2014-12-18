@@ -30,3 +30,11 @@
 - fixing some "utilization" variable issues
 
 - updating tower main section for new input set so that tower model main executes
+
+## 0.1.3 ([12/18/2014])
+
+[Andrew Ning](mailto: aning@byu.edu)
+
+[CHANGE]:
+
+- updated gradients to match the changes in 0.1.2 so all unit tests should pass
