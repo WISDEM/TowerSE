@@ -231,7 +231,6 @@ class TowerWaveDrag(Component):
         mu = self.mu
         beta = self.beta
         beta0= self.beta0
-        Re = rho*U*d/mu
 
         # dynamic pressure
         q = 0.5*rho*U**2
@@ -240,8 +239,10 @@ class TowerWaveDrag(Component):
         # Reynolds number and drag
         if self.cd_usr:
             cd = self.cd_usr*np.ones_like(self.d)
+            Re = 1.0
             dcd_dRe = 0.0
         else:
+            Re = rho*U*d/mu
             cd, dcd_dRe = cylinderDrag(Re)
 
         d = self.d
