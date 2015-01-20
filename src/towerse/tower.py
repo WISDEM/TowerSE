@@ -1280,7 +1280,400 @@ class TowerSE(Assembly):
         self.connect('gc.weldability', 'weldability')
         self.connect('gc.manufacturability', 'manufacturability')
 
+class JacketPositioning(Component):
 
+    # inputs
+    sea_depth = Float(20.0, iotype='in', units='m', desc='average sea depth for the site or for the particular monopile position')
+    tower_length = Float(iotype='in', units='m', desc='length of tower')
+    tower_to_shaft = Float(iotype='in', units='m', desc='vertical distance of tower top to shaft connection to hub')
+    monopile_extension = Float(5.0,iotype='in', units='m', desc='extension of monopile above average sea level')
+    deck_height = Float(iotype='in', units='m', desc='height of deck above mean sea level')
+    d_monopile = Float(iotype='in', units='m', desc='diameter of monopile')
+    t_monopile = Float(iotype='in', units='m', desc='wall thickness of monopile')
+    t_jacket = Float(iotype='in', units='m', desc='wall thickness of monopile')
+    d_tower_base = Float(iotype='in', units='m', desc='diameter at the tower base')
+    d_tower_top = Float(iotype='in', units='m', desc='diameter at the tower top')
+    t_tower_base = Float(iotype='in', units='m', desc='wall thickness of tower base')
+    t_tower_top = Float(iotype='in', units='m', desc='wall thickness of tower top')
+
+    # outputs
+    # tower
+    towerHeight = Float(iotype='in', units='m', desc='height of tower')
+    monopileHeight = Float(0.0, iotype='in', units='m', desc='height of monopile (0.0 if no monopile)')
+    z = Array(iotype='in', desc='locations along unit tower, linear lofting between')
+    d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
+    t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
+    n = Array(iotype='in', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
+    L_reinforced = Array(iotype='in', units='m', desc='distance along tower for reinforcements used in buckling calc')
+    n_monopile = Int(iotype='in', desc='number of finite elements in monopile, must be a minimum of 1 (top and bottom nodes)')
+    # environment
+    wind_zref = Float(iotype='in', units='m', desc='corresponding reference height')
+    wind_z0 = Float(0.0, iotype='in', units='m', desc='bottom of wind profile (height of ground/sea)')
+    z_surface = Float(iotype='in', units='m', desc='vertical location of water surface')
+    z_floor = Float(0.0, iotype='in', units='m', desc='vertical location of sea floor')
+
+    def execute(self):
+    	  
+    	  # tower/monopile positioning
+		    self.towerHeight = self.tower_length + 1.5*self.d_monopile - self.monopile_extension # account for extra length below sea level
+		    self.z = np.array([0.0, 1.5*self.d_monopile/self.towerHeight, (1.5*self.d_monopile+0.1)/self.towerHeight, (self.deck_height + 1.5*self.d_monopile - 5.0)/self.towerHeight, \
+		                        (self.deck_height + 1.5*self.d_monopile - self.monopile_extension + 0.1)/self.towerHeight, \
+		                        ((self.deck_height + 1.5*self.d_monopile - self.monopile_extension + 0.1)/self.towerHeight + 1.0)/2.0, 1.0])
+		             # nodes are at in m -5, 5, 5.1, 15, 15.1, (87.6+15.1)/2.0, and 87.6
+		    self.d = np.array([self.d_monopile, self.d_monopile, self.d_monopile+2.*self.t_monopile+2.*self.t_jacket, \
+		                       self.d_monopile+2.*self.t_monopile+2.*self.t_jacket, self.d_tower_base, (self.d_tower_base + self.d_tower_top)/2., \
+		                       self.d_tower_top])
+		    self.t = [self.t_monopile,  self.t_monopile+self.t_jacket, self.t_jacket, self.t_jacket, self.t_tower_base, \
+		    				(self.t_tower_base + self.t_tower_top)/2.0, self.t_tower_top]
+		    self.n = [4, 2, 6, 2, 5, 5] # varying n based on positioning due to asymetric node spacing 
+		    self.n_reinforced = 7
+		    self.L_reinforced = np.array([30., 30., 30., 30., 30., 30., 30.])  # [m] buckling length
+		    # monopile
+		    self.monopileHeight = self.sea_depth - (1.5*self.d_monopile - self.monopile_extension)
+		    self.n_monopile = 10   	  
+
+        # environment positioning
+        #wind
+		    self.wind_zref = self.towerHeight + self.tower_to_shaft
+		    self.wind_z0 = 1.5*self.d_monopile - self.monopile_extension
+		    #wave
+		    self.z_surface = 1.5*self.d_monopile - self.monopile_extension
+		    self.z_floor = 1.5*self.d_monopile - self.monopile_extension - self.sea_depth
+
+    '''TODO derivatives
+    def list_deriv_vars(self):
+
+        inputs = ('d', 't')
+        outputs = ('weldability', 'manufacturability')
+        return inputs, outputs
+
+
+    def provideJ(self):
+
+        dw_dd = np.diag(-1.0/self.t/self.min_d_to_t)
+        dw_dt = np.diag(self.d/self.t**2/self.min_d_to_t)
+
+        dw = np.hstack([dw_dd, dw_dt])
+
+
+        dm_dd = np.zeros_like(self.d)
+        dm_dd[0] = self.d[-1]/self.d[0]**2
+        dm_dd[-1] = -1.0/self.d[0]
+
+        dm = np.hstack([dm_dd, np.zeros(len(self.t))])
+
+        J = np.vstack([dw, dm])
+
+        return J'''
+
+
+class TowerMonopileSE(Assembly):
+
+    # geometry
+    #towerHeight = Float(iotype='in', units='m', desc='height of tower')
+    #monopileHeight = Float(0.0, iotype='in', units='m', desc='height of monopile (0.0 if no monopile)')
+    tower_length = Float(iotype='in', units='m', desc='length of tower')
+    deck_height = Float(iotype='in', units='m', desc='height of deck above mean sea level')
+    tower_to_shaft = Float(iotype='in', units='m', desc='vertical distance of tower top to shaft connection to hub')
+    monopile_extension = Float(5.0,iotype='in', units='m', desc='extension of monopile above average sea level')
+    d_monopile = Float(iotype='in', units='m', desc='diameter of monopile')
+    t_monopile = Float(iotype='in', units='m', desc='wall thickness of monopile')
+    t_jacket = Float(iotype='in', units='m', desc='wall thickness of monopile')
+    d_tower_base = Float(iotype='in', units='m', desc='diameter at the tower base')
+    d_tower_top = Float(iotype='in', units='m', desc='diameter at the tower top')
+    t_tower_base = Float(iotype='in', units='m', desc='wall thickness of tower base')
+    t_tower_top = Float(iotype='in', units='m', desc='wall thickness of tower top')
+    #z = Array(iotype='in', desc='locations along unit tower, linear lofting between')
+    #d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
+    #t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
+    #n = Array(iotype='in', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
+    #L_reinforced = Array(iotype='in', units='m', desc='distance along tower for reinforcements used in buckling calc')
+    #n_monopile = Int(iotype='in', desc='number of finite elements in monopile, must be a minimum of 1 (top and bottom nodes)')
+    yaw = Float(0.0, iotype='in', units='deg', desc='yaw angle')
+
+    # rna
+    top_m = Float(iotype='in', units='kg', desc='RNA (tower top) mass')
+    top_I = Array(iotype='in', units='kg*m**2', desc='mass moments of inertia. order: (xx, yy, zz, xy, xz, yz)')
+    top_cm = Array(iotype='in', units='m', desc='RNA center of mass')
+    top1_F = Array(iotype='in', units='N', desc='Aerodynamic forces')
+    top1_M = Array(iotype='in', units='N*m', desc='Aerodynamic moments')
+    top2_F = Array(iotype='in', units='N', desc='Aerodynamic forces')
+    top2_M = Array(iotype='in', units='N*m', desc='Aerodynamic moments')
+
+    # environment
+    sea_depth = Float(20.0, iotype='in', units='m', desc='average sea depth for the site or for the particular monopile position')
+    wind_rho = Float(1.225, iotype='in', units='kg/m**3', desc='air density')
+    wind_mu = Float(1.7934e-5, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of air')
+    wind_Uref1 = Float(iotype='in', units='m/s', desc='reference wind speed (usually at hub height)')
+    wind_Uref2 = Float(iotype='in', units='m/s', desc='reference wind speed (usually at hub height)')
+    #wind_zref = Float(iotype='in', units='m', desc='corresponding reference height')
+    #wind_z0 = Float(0.0, iotype='in', units='m', desc='bottom of wind profile (height of ground/sea)')
+    wind_cd= Float(iotype='in', desc='Cd coefficient, if left blank it will be calculated based on cylinder Re')  # -RRD
+
+    wave_rho = Float(1027.0, iotype='in', units='kg/m**3', desc='water density')
+    wave_mu = Float(1.3351e-3, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of water')
+    wave_cm = Float(2.0, iotype='in', desc='mass coefficient')
+    wave_cd= Float(iotype='in', desc='Cd coefficient, if left blank it will be calculated based on cylinder Re')  # -RRD
+
+    g = Float(9.81, iotype='in', units='m/s**2', desc='acceleration of gravity')
+
+    # constraint parameters
+    min_d_to_t = Float(120.0, iotype='in', desc='minimum allowable diameter to thickness ratio')
+    min_taper = Float(0.4, iotype='in', desc='minimum allowable taper ratio from tower top to tower bottom')
+
+    # material properties
+    material = Instance(Material(matname='HeavySteel', E=2.1E11, G=8.08E10, rho=8500., fy=345.e6), iotype='in', desc='Material properties for the tower shell.')
+##    E = Float(210e9, iotype='in', units='N/m**2', desc='material modulus of elasticity')
+##    G = Float(80.8e9, iotype='in', units='N/m**2', desc='material shear modulus')
+##    rho = Float(8500.0, iotype='in', units='kg/m**3', desc='material density')
+##    sigma_y = Float(450.0e6, iotype='in', units='N/m**2', desc='yield stress')
+
+    # safety factors
+    gamma_f = Float(1.35, iotype='in', desc='safety factor on loads')
+    gamma_m = Float(1.1, iotype='in', desc='safety factor on materials')
+    gamma_n = Float(1.0, iotype='in', desc='safety factor on consequence of failure')
+    gamma_b = Float(1.1, iotype='in', desc='buckling safety factor on consequence of failure')
+
+    # fatigue parameters
+    life = Float(20.0, iotype='in', desc='fatigue life of tower')
+    m_SN = Int(4, iotype='in', desc='slope of S/N curve')
+    DC = Float(80.0, iotype='in', desc='standard value of stress')
+    gamma_fatigue = Float(1.755, iotype='in', desc='total safety factor for fatigue')
+    z_DEL = Array(iotype='in', desc='locations along unit tower for M_DEL')
+    M_DEL = Array(iotype='in', units='N*m', desc='damage equivalent moments along tower')
+
+    # replace
+    wind1 = Slot(WindBase)
+    wind2 = Slot(WindBase)
+    wave1 = Slot(WaveBase)
+    wave2 = Slot(WaveBase)
+    soil = Slot(SoilBase)
+    tower1 = Slot(TowerBase)
+    tower2 = Slot(TowerBase)
+
+    # outputs
+    mass = Float(iotype='out', units='kg')
+    f1 = Float(iotype='out', units='Hz', desc='First natural frequency')
+    f2 = Float(iotype='out', units='Hz', desc='Second natural frequency')
+    top_deflection1 = Float(iotype='out', units='m', desc='Deflection of tower top in yaw-aligned +x direction')
+    top_deflection2 = Float(iotype='out', units='m', desc='Deflection of tower top in yaw-aligned +x direction')
+    z_nodes = Array(iotype='out', units='m')
+    stress1 = Array(iotype='out', units='N/m**2', desc='Von Mises stress along tower on downwind side (yaw-aligned +x).  Normalized by yield stress.  Includes safety factors.')
+    stress2 = Array(iotype='out', units='N/m**2', desc='Von Mises stress along tower on downwind side (yaw-aligned +x).  Normalized by yield stress.  Includes safety factors.')
+    shellBuckling1 = Array(iotype='out', desc='Shell buckling constraint load case #1.  Should be < 1 for feasibility.  Includes safety factors')
+    shellBuckling2 = Array(iotype='out', desc='Shell buckling constraint load case #2.  Should be < 1 for feasibility.  Includes safety factors')
+    buckling1 = Array(iotype='out', desc='Global buckling constraint load case #1.  Should be < 1 for feasibility.  Includes safety factors')
+    buckling2 = Array(iotype='out', desc='Global buckling constraint load case #2.  Should be < 1 for feasibility.  Includes safety factors')
+    damage = Array(iotype='out', desc='Fatigue damage at each tower section')
+    weldability = Array(iotype='out')
+    manufacturability = Float(iotype='out')
+
+
+    def configure(self):
+
+        self.add('geometry', TowerDiscretization())
+        self.add('wind1', WindBase())
+        self.add('wind2', WindBase())
+        self.add('wave1', WaveBase())
+        self.add('wave2', WaveBase())
+        self.add('windLoads1', TowerWindDrag())
+        self.add('windLoads2', TowerWindDrag())
+        self.add('waveLoads1', TowerWaveDrag())
+        self.add('waveLoads2', TowerWaveDrag())
+        self.add('soil', SoilBase())
+        self.add('tower1', TowerBase())
+        self.add('tower2', TowerBase())
+        self.add('gc', GeometricConstraints())
+        self.add('jp', JacketPositioning())
+
+        # self.driver.workflow.add(['geometry', 'wind', 'wave', 'windLoads', 'waveLoads', 'soil', 'rna', 'rotorloads', 'tower'])
+        self.driver.workflow.add(['geometry', 'wind1', 'wind2', 'wave1', 'wave2',
+            'windLoads1', 'windLoads2', 'waveLoads1', 'waveLoads2', 'soil', 'tower1', 'tower2', 'gc', 'jp'])
+        # TODO: probably better to do this with a driver or something rather than manually setting 2 cases
+
+        # connections to geometry (from positioning module)
+        self.connect('jp.towerHeight', 'geometry.towerHeight')
+        self.connect('jp.monopileHeight', 'geometry.monopileHeight')
+        self.connect('jp.d_monopile', 'geometry.d_monopile')
+        self.connect('jp.t_monopile', 'geometry.t_monopile')
+        self.connect('jp.z', 'geometry.z')
+        self.connect('jp.d', 'geometry.d')
+        self.connect('jp.t', 'geometry.t')
+        self.connect('jp.n', 'geometry.n')
+        self.connect('jp.n_monopile', 'geometry.n_monopile')
+        self.connect('jp.L_reinforced', 'geometry.L_reinforced')
+
+
+        # connections to wind1
+        self.connect('geometry.z_node', 'wind1.z')
+        self.connect('wind_Uref1', 'wind1.Uref')
+        self.connect('jp.wind_zref', 'wind1.zref') # from positioning component
+        self.connect('jp.wind_z0', 'wind1.z0') # from positioning component
+
+        # connections to wind2
+        self.connect('geometry.z_node', 'wind2.z')
+        self.connect('wind_Uref2', 'wind2.Uref')
+        self.connect('jp.wind_zref', 'wind2.zref') # from positioning component
+        self.connect('jp.wind_z0', 'wind2.z0') # from positioning component
+
+        # connections to wave1
+        self.connect('geometry.z_node', 'wave1.z')
+
+        # connections to wave2
+        self.connect('geometry.z_node', 'wave2.z')
+
+        # connections to windLoads1
+        self.connect('wind1.U', 'windLoads1.U')
+        self.connect('wind1.beta', 'windLoads1.beta')
+        self.connect('wind_rho', 'windLoads1.rho')
+        self.connect('wind_mu', 'windLoads1.mu')
+
+        self.connect('wind_cd', 'windLoads1.cd_usr')  # -RRD
+        self.connect('geometry.z_node', 'windLoads1.z')
+        self.connect('geometry.d_node', 'windLoads1.d')
+
+        # connections to windLoads2
+        self.connect('wind2.U', 'windLoads2.U')
+        self.connect('wind2.beta', 'windLoads2.beta')
+        self.connect('wind_rho', 'windLoads2.rho')
+        self.connect('wind_mu', 'windLoads2.mu')
+
+        self.connect('wind_cd', 'windLoads2.cd_usr')  # -RRD
+        self.connect('geometry.z_node', 'windLoads2.z')
+        self.connect('geometry.d_node', 'windLoads2.d')
+
+        # connections to waveLoads1
+        self.connect('wave1.U', 'waveLoads1.U')
+        self.connect('wave1.U0', 'waveLoads1.U0')
+        self.connect('wave1.A', 'waveLoads1.A')
+        self.connect('wave1.A0', 'waveLoads1.A0')
+        self.connect('wave1.beta', 'waveLoads1.beta')
+        self.connect('wave1.beta0', 'waveLoads1.beta0')
+        self.connect('wave_rho', 'waveLoads1.rho')
+        self.connect('wave_mu', 'waveLoads1.mu')
+        self.connect('wave_cm', 'waveLoads1.cm')
+        self.connect('wave_cd', 'waveLoads1.cd_usr')  # -RRD
+        self.connect('geometry.z_node', 'waveLoads1.z')
+        self.connect('geometry.d_node', 'waveLoads1.d')
+        self.connect('jp.z_surface','wave1.z_surface')  # from positioning component
+        self.connect('jp.z_floor','wave1.z_floor')  # from positioning component
+
+
+        # connections to waveLoads2
+        self.connect('wave2.U', 'waveLoads2.U')
+        self.connect('wave2.U0', 'waveLoads2.U0')
+        self.connect('wave2.A', 'waveLoads2.A')
+        self.connect('wave2.beta', 'waveLoads2.beta')
+        self.connect('wave2.beta0', 'waveLoads2.beta0')
+        self.connect('wave2.A0', 'waveLoads2.A0')
+        self.connect('wave_rho', 'waveLoads2.rho')
+        self.connect('wave_mu', 'waveLoads2.mu')
+        self.connect('wave_cm', 'waveLoads2.cm')
+        self.connect('wave_cd', 'waveLoads2.cd_usr')  # -RRD
+        self.connect('geometry.z_node', 'waveLoads2.z')
+        self.connect('geometry.d_node', 'waveLoads2.d')
+        self.connect('jp.z_surface','wave2.z_surface')  # from positioning component
+        self.connect('jp.z_floor','wave2.z_floor')  # from positioning component
+
+        # connections to tower
+        self.connect('jp.towerHeight', 'tower1.towerHeight')  # from positioning component
+        self.connect('geometry.z_node', 'tower1.z')
+        self.connect('geometry.d_node', 'tower1.d')
+        self.connect('geometry.t_node', 'tower1.t')
+        self.connect('geometry.L_reinforced_node', 'tower1.L_reinforced')
+        self.connect('windLoads1.windLoads', 'tower1.windLoads')
+        self.connect('waveLoads1.waveLoads', 'tower1.waveLoads')
+        self.connect('soil.k', 'tower1.k_soil')
+        self.connect('yaw', 'tower1.yaw')
+        self.connect('top_m', 'tower1.top_m')
+        self.connect('top_cm', 'tower1.top_cm')
+        self.connect('top_I', 'tower1.top_I')
+        self.connect('top1_F', 'tower1.top_F')
+        self.connect('top1_M', 'tower1.top_M')
+        self.connect('g', 'tower1.g')
+        self.connect('material', 'tower1.material')
+##        self.connect('G', 'tower1.G')
+##        self.connect('rho', 'tower1.rho')
+##        self.connect('sigma_y', 'tower1.sigma_y')
+        self.connect('gamma_f', 'tower1.gamma_f')
+        self.connect('gamma_m', 'tower1.gamma_m')
+        self.connect('gamma_n', 'tower1.gamma_n')
+        self.connect('gamma_b', 'tower1.gamma_b')
+        self.connect('life', 'tower1.life')
+        self.connect('m_SN', 'tower1.m_SN')
+        self.connect('DC', 'tower1.DC')
+        self.connect('gamma_fatigue', 'tower1.gamma_fatigue')
+        self.connect('z_DEL', 'tower1.z_DEL')
+        self.connect('M_DEL', 'tower1.M_DEL')
+
+        # connections to tower
+        self.connect('jp.towerHeight', 'tower2.towerHeight')  # from positioning component
+        self.connect('geometry.z_node', 'tower2.z')
+        self.connect('geometry.d_node', 'tower2.d')
+        self.connect('geometry.t_node', 'tower2.t')
+        self.connect('geometry.L_reinforced_node', 'tower2.L_reinforced')
+        self.connect('windLoads2.windLoads', 'tower2.windLoads')
+        self.connect('waveLoads2.waveLoads', 'tower2.waveLoads')
+        self.connect('soil.k', 'tower2.k_soil')
+        self.connect('yaw', 'tower2.yaw')
+        self.connect('top_m', 'tower2.top_m')
+        self.connect('top_cm', 'tower2.top_cm')
+        self.connect('top_I', 'tower2.top_I')
+        self.connect('top2_F', 'tower2.top_F')
+        self.connect('top2_M', 'tower2.top_M')
+        self.connect('g', 'tower2.g')
+        self.connect('material', 'tower2.material')
+##        self.connect('E', 'tower2.E')
+##        self.connect('G', 'tower2.G')
+##        self.connect('rho', 'tower2.rho')
+##        self.connect('sigma_y', 'tower2.sigma_y')
+        self.connect('gamma_f', 'tower2.gamma_f')
+        self.connect('gamma_m', 'tower2.gamma_m')
+        self.connect('gamma_n', 'tower2.gamma_n')
+        self.connect('gamma_b', 'tower2.gamma_b')
+        self.connect('life', 'tower2.life')
+        self.connect('m_SN', 'tower2.m_SN')
+        self.connect('DC', 'tower2.DC')
+        self.connect('gamma_fatigue', 'tower2.gamma_fatigue')
+        self.connect('z_DEL', 'tower2.z_DEL')
+        self.connect('M_DEL', 'tower2.M_DEL')
+
+        # connections to gc
+        self.connect('jp.d', 'gc.d')
+        self.connect('jp.t', 'gc.t')
+        self.connect('min_d_to_t', 'gc.min_d_to_t')
+        self.connect('min_taper', 'gc.min_taper')
+
+        # connections to jp
+        self.connect('sea_depth','jp.sea_depth')
+        self.connect('tower_length','jp.tower_length')
+        self.connect('tower_to_shaft','jp.tower_to_shaft')
+        self.connect('deck_height','jp.deck_height')
+        self.connect('monopile_extension','jp.monopile_extension')
+        self.connect('d_monopile','jp.d_monopile')
+        self.connect('t_monopile','jp.t_monopile')
+        self.connect('t_jacket','jp.t_jacket')
+        self.connect('d_tower_base','jp.d_tower_base')
+        self.connect('d_tower_top','jp.d_tower_top')
+        self.connect('t_tower_base','jp.t_tower_base')
+        self.connect('t_tower_top','jp.t_tower_top')
+
+        # connections to outputs
+        self.connect('tower1.mass', 'mass')
+        self.connect('tower1.f1', 'f1')
+        self.connect('tower1.f2', 'f2')
+        self.connect('tower1.top_deflection', 'top_deflection1')
+        self.connect('tower2.top_deflection', 'top_deflection2')
+        self.connect('tower1.z', 'z_nodes')
+        self.connect('tower1.stress', 'stress1')
+        self.connect('tower2.stress', 'stress2')
+        self.connect('tower1.buckling', 'buckling1')
+        self.connect('tower2.buckling', 'buckling2')
+        self.connect('tower1.shellBuckling', 'shellBuckling1')
+        self.connect('tower2.shellBuckling', 'shellBuckling2')
+        self.connect('tower1.damage', 'damage')
+        self.connect('gc.weldability', 'weldability')
+        self.connect('gc.manufacturability', 'manufacturability')
 
 if __name__ == '__main__':
 
