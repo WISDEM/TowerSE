@@ -20,7 +20,6 @@
 
 ## 0.1.2 ([12/04/2014])
 
-
 [Katherine Dykes](mailto: katherine.dykes@nrel.gov)
 
 [CHANGE]:
@@ -38,3 +37,16 @@
 [CHANGE]:
 
 - updated gradients to match the changes in 0.1.2 so all unit tests should pass
+
+
+## 0.1.4 ([12/04/2014])
+
+[Katherine Dykes](mailto: katherine.dykes@nrel.gov)
+
+[NEW]:
+
+- added TowerMonopileSE assembly and JacketPositioning component for crude representation of tower/jacket/monopile substructure
+
+[CHANGE]:
+
+- updated gradient tests to include test for new JacketPositioning component

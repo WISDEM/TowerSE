@@ -31,7 +31,7 @@ Author: [S. Andrew Ning](mailto:nrel.wisdem+towerse@gmail.com)
 
 ## Version
 
-This software is a beta version 0.1.0.
+This software is a beta version 0.1.4.
 
 ## Detailed Documentation
 
