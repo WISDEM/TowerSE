@@ -11,7 +11,7 @@ import unittest
 import numpy as np
 from commonse.utilities import check_gradient, check_gradient_unit_test
 from commonse.rna import RNAMass, RotorLoads
-from towerse.tower import TowerWindDrag, TowerWaveDrag, TowerDiscretization, GeometricConstraints
+from towerse.tower import TowerWindDrag, TowerWaveDrag, TowerDiscretization, GeometricConstraints, JacketPositioning
 
 
 class TestTowerWindDrag(unittest.TestCase):
@@ -122,9 +122,28 @@ class TestTowerDiscretization(unittest.TestCase):
 
         check_gradient_unit_test(self, td)
 
+class TestJacketPositioning(unittest.TestCase):
 
+    def test1(self):
 
+        jp = JacketPositioning()
+        # inputs
+        jp.sea_depth = 20.0
+        jp.tower_length = 87.6
+        jp.tower_to_shaft = 2.0
+        jp.monopile_extension = 5.0
+        jp.deck_height = 15.0
+        jp.d_monopile = 6.0
+        jp.t_monopile = 0.06
+        jp.t_jacket = 0.05
+        jp.d_tower_base = 6.0
+        jp.d_tower_top = 3.87
+        jp.t_tower_base = 0.027
+        jp.t_tower_top = 0.019
 
+        check_gradient_unit_test(self, jp, display=True)
+
+# TODO: move these to commonse tests - remove RNA content from tower
 class TestRNAMass(unittest.TestCase):
 
     def test1(self):

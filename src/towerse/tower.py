@@ -1280,6 +1280,9 @@ class TowerSE(Assembly):
         self.connect('gc.weldability', 'weldability')
         self.connect('gc.manufacturability', 'manufacturability')
 
+
+#### ------------- Additional Component and Assembly for Monopile/Jacket structure
+
 class JacketPositioning(Component):
 
     # inputs
@@ -1298,73 +1301,142 @@ class JacketPositioning(Component):
 
     # outputs
     # tower
-    towerHeight = Float(iotype='in', units='m', desc='height of tower')
-    monopileHeight = Float(0.0, iotype='in', units='m', desc='height of monopile (0.0 if no monopile)')
-    z = Array(iotype='in', desc='locations along unit tower, linear lofting between')
-    d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
-    t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
-    n = Array(iotype='in', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
-    L_reinforced = Array(iotype='in', units='m', desc='distance along tower for reinforcements used in buckling calc')
-    n_monopile = Int(iotype='in', desc='number of finite elements in monopile, must be a minimum of 1 (top and bottom nodes)')
+    towerHeight = Float(iotype='out', units='m', desc='height of tower')
+    monopileHeight = Float(0.0, iotype='out', units='m', desc='height of monopile (0.0 if no monopile)')
+    z = Array(iotype='out', desc='locations along unit tower, linear lofting between')
+    d = Array(iotype='out', units='m', desc='tower diameter at corresponding locations')
+    t = Array(iotype='out', units='m', desc='shell thickness at corresponding locations')
+    n = Array(iotype='out', dtype=np.int, desc='number of finite elements between sections.  array length should be ``len(z)-1``')
+    L_reinforced = Array(iotype='out', units='m', desc='distance along tower for reinforcements used in buckling calc')
+    n_monopile = Int(iotype='out', desc='number of finite elements in monopile, must be a minimum of 1 (top and bottom nodes)')
     # environment
-    wind_zref = Float(iotype='in', units='m', desc='corresponding reference height')
-    wind_z0 = Float(0.0, iotype='in', units='m', desc='bottom of wind profile (height of ground/sea)')
-    z_surface = Float(iotype='in', units='m', desc='vertical location of water surface')
-    z_floor = Float(0.0, iotype='in', units='m', desc='vertical location of sea floor')
+    wind_zref = Float(iotype='out', units='m', desc='corresponding reference height')
+    wind_z0 = Float(0.0, iotype='out', units='m', desc='bottom of wind profile (height of ground/sea)')
+    z_surface = Float(iotype='out', units='m', desc='vertical location of water surface')
+    z_floor = Float(0.0, iotype='out', units='m', desc='vertical location of sea floor')
+
+    def __init__(self):
+        
+        super(JacketPositioning, self).__init__()       
+        
+        #controls what happens if derivatives are missing
+        self.missing_deriv_policy = 'assume_zero'
 
     def execute(self):
-    	  
-    	  # tower/monopile positioning
-		    self.towerHeight = self.tower_length + 1.5*self.d_monopile - self.monopile_extension # account for extra length below sea level
-		    self.z = np.array([0.0, 1.5*self.d_monopile/self.towerHeight, (1.5*self.d_monopile+0.1)/self.towerHeight, (self.deck_height + 1.5*self.d_monopile - 5.0)/self.towerHeight, \
-		                        (self.deck_height + 1.5*self.d_monopile - self.monopile_extension + 0.1)/self.towerHeight, \
-		                        ((self.deck_height + 1.5*self.d_monopile - self.monopile_extension + 0.1)/self.towerHeight + 1.0)/2.0, 1.0])
-		             # nodes are at in m -5, 5, 5.1, 15, 15.1, (87.6+15.1)/2.0, and 87.6
-		    self.d = np.array([self.d_monopile, self.d_monopile, self.d_monopile+2.*self.t_monopile+2.*self.t_jacket, \
-		                       self.d_monopile+2.*self.t_monopile+2.*self.t_jacket, self.d_tower_base, (self.d_tower_base + self.d_tower_top)/2., \
-		                       self.d_tower_top])
-		    self.t = [self.t_monopile,  self.t_monopile+self.t_jacket, self.t_jacket, self.t_jacket, self.t_tower_base, \
-		    				(self.t_tower_base + self.t_tower_top)/2.0, self.t_tower_top]
-		    self.n = [4, 2, 6, 2, 5, 5] # varying n based on positioning due to asymetric node spacing 
-		    self.n_reinforced = 7
-		    self.L_reinforced = np.array([30., 30., 30., 30., 30., 30., 30.])  # [m] buckling length
-		    # monopile
-		    self.monopileHeight = self.sea_depth - (1.5*self.d_monopile - self.monopile_extension)
-		    self.n_monopile = 10   	  
+        
+        # tower/monopile positioning
+        self.towerHeight = self.tower_length + 1.5*self.d_monopile - self.monopile_extension # account for extra length below sea level
+        self.z = np.array([0.0, 1.5*self.d_monopile/self.towerHeight, (1.5*self.d_monopile+0.1)/self.towerHeight, (self.deck_height + 1.5*self.d_monopile - self.monopile_extension)/self.towerHeight, \
+                            (self.deck_height + 1.5*self.d_monopile - self.monopile_extension + 0.1)/self.towerHeight, \
+                            ((self.deck_height + 1.5*self.d_monopile - self.monopile_extension + 0.1)/self.towerHeight + 1.0)/2.0, 1.0])
+        self.d = np.array([self.d_monopile, self.d_monopile, self.d_monopile+2.*self.t_monopile+2.*self.t_jacket, \
+                           self.d_monopile+2.*self.t_monopile+2.*self.t_jacket, self.d_tower_base, (self.d_tower_base + self.d_tower_top)/2., \
+                           self.d_tower_top])
+        self.t = [self.t_monopile,  self.t_monopile+self.t_jacket, self.t_jacket, self.t_jacket, self.t_tower_base, \
+                (self.t_tower_base + self.t_tower_top)/2.0, self.t_tower_top]
+        self.n = [4, 2, 6, 2, 5, 5] # varying n based on positioning due to asymetric node spacing 
+        self.n_reinforced = 7
+        self.L_reinforced = np.array([30., 30., 30., 30., 30., 30., 30.])  # [m] buckling length
+        # monopile
+        self.monopileHeight = self.sea_depth - (1.5*self.d_monopile - self.monopile_extension)
+        self.n_monopile = 10      
 
         # environment positioning
         #wind
-		    self.wind_zref = self.towerHeight + self.tower_to_shaft
-		    self.wind_z0 = 1.5*self.d_monopile - self.monopile_extension
-		    #wave
-		    self.z_surface = 1.5*self.d_monopile - self.monopile_extension
-		    self.z_floor = 1.5*self.d_monopile - self.monopile_extension - self.sea_depth
+        self.wind_zref = self.towerHeight + self.tower_to_shaft
+        self.wind_z0 = 1.5*self.d_monopile - self.monopile_extension
+        #wave
+        self.z_surface = 1.5*self.d_monopile - self.monopile_extension
+        self.z_floor = 1.5*self.d_monopile - self.monopile_extension - self.sea_depth
 
-    '''TODO derivatives
+        # derivatives
+        d_tH_d_tl = 1.0
+        d_tH_d_md = 1.5
+        d_tH_d_me = -1.0
+
+        d_z_d_md = np.array([0.0,(self.towerHeight*1.5 - 1.5*self.d_monopile*1.5)/(self.towerHeight**2.),(self.towerHeight*1.5 - (1.5*self.d_monopile+0.1)*1.5)/(self.towerHeight**2.), \
+                             (1.5*self.towerHeight - (self.deck_height + 1.5*self.d_monopile - self.monopile_extension)*1.5)/(self.towerHeight**2.), \
+                             (1.5*self.towerHeight - (self.deck_height + 1.5*self.d_monopile - self.monopile_extension + 0.1)*1.5)/(self.towerHeight**2.), \
+                             0.5*(1.5*self.towerHeight - (self.deck_height + 1.5*self.d_monopile - self.monopile_extension + 0.1)*1.5)/(self.towerHeight**2.), 0.0])
+        d_z_d_tl = np.array([0.0,-(1.5*self.d_monopile)/(self.towerHeight**2.),-(1.5*self.d_monopile+0.1)/(self.towerHeight**2.), \
+                             -(self.deck_height + 1.5*self.d_monopile - self.monopile_extension)/(self.towerHeight**2.), \
+                             -(self.deck_height + 1.5*self.d_monopile - self.monopile_extension + 0.1)/(self.towerHeight**2.), \
+                             -0.5*(self.deck_height + 1.5*self.d_monopile - self.monopile_extension + 0.1)/(self.towerHeight**2.), 0.0])
+        d_z_d_dH =np.array([0.0, 0.0, 0.0, 1./self.towerHeight, 1./self.towerHeight, 0.5/self.towerHeight, 0.0])
+        d_z_d_me = np.array([0.0,(1.5*self.d_monopile)/(self.towerHeight**2.), (1.5*self.d_monopile+0.1)/(self.towerHeight**2.), \
+                             (-self.towerHeight+(self.deck_height + 1.5*self.d_monopile - self.monopile_extension))/(self.towerHeight**2.), \
+                             (-self.towerHeight+(self.deck_height + 1.5*self.d_monopile - self.monopile_extension + 0.1))/(self.towerHeight**2.), \
+                             0.5*(-self.towerHeight+(self.deck_height + 1.5*self.d_monopile - self.monopile_extension + 0.1))/(self.towerHeight**2.), 0.0])
+
+        d_d_d_md = np.array([1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0])
+        d_d_d_mt = np.array([0.0, 0.0, 2.0, 2.0, 0.0, 0.0, 0.0])
+        d_d_d_jt = np.array([0.0, 0.0, 2.0, 2.0, 0.0, 0.0, 0.0])
+        d_d_d_tbd = np.array([0.0, 0.0, 0.0, 0.0, 1.0, 0.5, 0.0])
+        d_d_d_ttd = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0])
+
+        d_t_d_mt = np.array([1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        d_t_d_jt = np.array([0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0])
+        d_t_d_ttb = np.array([0.0, 0.0, 0.0, 0.0, 1.0, 0.5, 0.0])
+        d_t_d_ttt = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0])
+
+        d_mH_d_md = -1.5
+        d_mH_d_sd = 1.0
+        d_mH_d_me = 1.0
+
+        d_zref_d_tl = d_tH_d_tl
+        d_zref_d_md = d_tH_d_md
+        d_zref_d_me = d_tH_d_me
+        d_zref_d_ts = 1.0
+
+        d_z0_d_md = 1.5
+        d_z0_d_me = -1.0
+        
+        d_zsurf_d_md = 1.5
+        d_zsurf_d_me = -1.0
+
+        d_zfl_d_md = 1.5
+        d_zfl_d_me = -1.0
+        d_zfl_d_sd = -1.0
+
+        self.J = np.array([[0.0, d_tH_d_tl, 0.0, d_tH_d_me, 0.0, d_tH_d_md, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], \
+                           [d_mH_d_sd, 0.0, 0.0, d_mH_d_me, 0.0, d_mH_d_md, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], \
+                           [0.0, d_zref_d_tl, d_zref_d_ts, d_zref_d_me, 0.0, d_zref_d_md, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], \
+                           [0.0, 0.0, 0.0, d_z0_d_me, 0.0, d_z0_d_md, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], \
+                           [0.0, 0.0, 0.0, d_zsurf_d_me, 0.0, d_zsurf_d_md, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], \
+                           [d_zfl_d_sd, 0.0, 0.0, d_zfl_d_me, 0.0, d_zfl_d_md, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], \
+                           [0.0, 0.0, 0.0, 0.0, 0.0, d_d_d_md[0], d_d_d_mt[0], d_d_d_jt[0], d_d_d_tbd[0], d_d_d_ttd[0], 0.0, 0.0], \
+                           [0.0, 0.0, 0.0, 0.0, 0.0, d_d_d_md[1], d_d_d_mt[1], d_d_d_jt[1], d_d_d_tbd[1], d_d_d_ttd[1], 0.0, 0.0], \
+                           [0.0, 0.0, 0.0, 0.0, 0.0, d_d_d_md[2], d_d_d_mt[2], d_d_d_jt[2], d_d_d_tbd[2], d_d_d_ttd[2], 0.0, 0.0], \
+                           [0.0, 0.0, 0.0, 0.0, 0.0, d_d_d_md[3], d_d_d_mt[3], d_d_d_jt[3], d_d_d_tbd[3], d_d_d_ttd[3], 0.0, 0.0], \
+                           [0.0, 0.0, 0.0, 0.0, 0.0, d_d_d_md[4], d_d_d_mt[4], d_d_d_jt[4], d_d_d_tbd[4], d_d_d_ttd[4], 0.0, 0.0], \
+                           [0.0, 0.0, 0.0, 0.0, 0.0, d_d_d_md[5], d_d_d_mt[5], d_d_d_jt[5], d_d_d_tbd[5], d_d_d_ttd[5], 0.0, 0.0], \
+                           [0.0, 0.0, 0.0, 0.0, 0.0, d_d_d_md[6], d_d_d_mt[6], d_d_d_jt[6], d_d_d_tbd[6], d_d_d_ttd[6], 0.0, 0.0], \
+                           [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, d_t_d_mt[0], d_t_d_jt[0], 0.0, 0.0, d_t_d_ttb[0], d_t_d_ttt[0]], \
+                           [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, d_t_d_mt[1], d_t_d_jt[1], 0.0, 0.0, d_t_d_ttb[1], d_t_d_ttt[1]], \
+                           [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, d_t_d_mt[2], d_t_d_jt[2], 0.0, 0.0, d_t_d_ttb[2], d_t_d_ttt[2]], \
+                           [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, d_t_d_mt[3], d_t_d_jt[3], 0.0, 0.0, d_t_d_ttb[3], d_t_d_ttt[3]], \
+                           [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, d_t_d_mt[4], d_t_d_jt[4], 0.0, 0.0, d_t_d_ttb[4], d_t_d_ttt[4]], \
+                           [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, d_t_d_mt[5], d_t_d_jt[5], 0.0, 0.0, d_t_d_ttb[5], d_t_d_ttt[5]], \
+                           [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, d_t_d_mt[6], d_t_d_jt[6], 0.0, 0.0, d_t_d_ttb[6], d_t_d_ttt[6]], \
+                           [0.0, d_z_d_tl[0], 0.0, d_z_d_me[0], d_z_d_dH[0], d_z_d_md[0], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], \
+                           [0.0, d_z_d_tl[1], 0.0, d_z_d_me[1], d_z_d_dH[1], d_z_d_md[1], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], \
+                           [0.0, d_z_d_tl[2], 0.0, d_z_d_me[2], d_z_d_dH[2], d_z_d_md[2], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], \
+                           [0.0, d_z_d_tl[3], 0.0, d_z_d_me[3], d_z_d_dH[3], d_z_d_md[3], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], \
+                           [0.0, d_z_d_tl[4], 0.0, d_z_d_me[4], d_z_d_dH[4], d_z_d_md[4], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], \
+                           [0.0, d_z_d_tl[5], 0.0, d_z_d_me[5], d_z_d_dH[5], d_z_d_md[5], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], \
+                           [0.0, d_z_d_tl[6], 0.0, d_z_d_me[6], d_z_d_dH[6], d_z_d_md[6], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+
+
     def list_deriv_vars(self):
 
-        inputs = ('d', 't')
-        outputs = ('weldability', 'manufacturability')
+        inputs = ('sea_depth', 'tower_length','tower_to_shaft','monopile_extension', 'deck_height','d_monopile','t_monopile',\
+                  't_jacket', 'd_tower_base', 'd_tower_top', 't_tower_base', 't_tower_top')
+        outputs = ('towerHeight', 'monopileHeight', 'wind_zref','wind_z0', 'z_surface','z_floor','d', 't', 'z')
         return inputs, outputs
-
 
     def provideJ(self):
 
-        dw_dd = np.diag(-1.0/self.t/self.min_d_to_t)
-        dw_dt = np.diag(self.d/self.t**2/self.min_d_to_t)
-
-        dw = np.hstack([dw_dd, dw_dt])
-
-
-        dm_dd = np.zeros_like(self.d)
-        dm_dd[0] = self.d[-1]/self.d[0]**2
-        dm_dd[-1] = -1.0/self.d[0]
-
-        dm = np.hstack([dm_dd, np.zeros(len(self.t))])
-
-        J = np.vstack([dw, dm])
-
-        return J'''
+        return self.J
 
 
 class TowerMonopileSE(Assembly):
