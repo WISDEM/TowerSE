@@ -964,8 +964,11 @@ class TowerWithFrame3DD(TowerBase):
 
 
         # axial and shear stress (all stress evaluated on +x yaw side)
-        A = math.pi * self.d * self.t
-        Iyy = math.pi/8.0 * self.d**3 * self.t
+        #A = math.pi * self.d * self.t
+        A = math.pi/4 * (self.d**2-(self.d-2 * self.t)**2)
+        #Iyy = math.pi/8.0 * self.d**3 * self.t
+        Iyy = math.pi/64.0 * (self.d**4 -(self.d- 2*self.t)**4)
+
         axial_stress = Fz/A - Myy/Iyy*self.d/2.0
         shear_stress = 2. * Vx / A
 
