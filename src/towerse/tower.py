@@ -863,7 +863,7 @@ class TowerWithFrame3DD(TowerBase):
         rhox = np.array([self.top_cm[0]])
         rhoy = np.array([self.top_cm[1]])
         rhoz = np.array([self.top_cm[2]])
-        addGravityLoad = False
+        addGravityLoad = True
 
         tower.changeExtraNodeMass(N, EMs, EMx, EMy, EMz, EMxy, EMxz, EMyz, rhox, rhoy, rhoz, addGravityLoad)
         # ------------------------------------
