@@ -950,18 +950,20 @@ class TowerWithFrame3DD(TowerBase):
 
         # shear and bending (convert from local to global c.s.)
         Fz = forces.Nx[iCase, :]
-        # Vy = forces.Vy[iCase, :]
+        Vy = forces.Vy[iCase, :]
         Vx = -forces.Vz[iCase, :]
-        # Tzz = forces.Txx[iCase, :]
-        Myy = forces.Myy[iCase, :]
-        # Mxx = -forces.Mzz[iCase, :]
 
+        Myy = forces.Myy[iCase, :]
+        Mxx = -forces.Mzz[iCase, :]
+        Mzz = forces.Txx[iCase, :]
 
         # one per element (first negative b.c. need reaction)
         Fz = np.concatenate([[-Fz[0]], Fz[1::2]])
         Vx = np.concatenate([[-Vx[0]], Vx[1::2]])
+        Vy = np.concatenate([[-Vy[0]], Vy[1::2]])
+        Mxx = np.concatenate([[-Mxx[0]], Mxx[1::2]])
         Myy = np.concatenate([[-Myy[0]], Myy[1::2]])
-
+        Mzz = np.concatenate([[-Mzz[0]], Mzz[1::2]])
 
         # axial and shear stress (all stress evaluated on +x yaw side)
         #A = math.pi * self.d * self.t
@@ -969,8 +971,8 @@ class TowerWithFrame3DD(TowerBase):
         #Iyy = math.pi/8.0 * self.d**3 * self.t
         Iyy = math.pi/64.0 * (self.d**4 -(self.d- 2*self.t)**4)
 
-        axial_stress = Fz/A - Myy/Iyy*self.d/2.0
-        shear_stress = 2. * Vx / A
+        axial_stress = Fz/A - np.sqrt(Mxx**2+Myy**2)/Iyy*self.d/2.0
+        shear_stress = 2. * np.sqrt(Vx**2+Vy**2) / A
 
         # hoop_stress (Eurocode method)
         hoop_stress = hoopStressEurocode(self.windLoads, self.waveLoads,
