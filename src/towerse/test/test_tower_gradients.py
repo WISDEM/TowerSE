@@ -10,7 +10,8 @@ Copyright (c) NREL. All rights reserved.
 import unittest
 import numpy as np
 from commonse.utilities import check_gradient, check_gradient_unit_test
-from towerse.tower import TowerWindDrag, TowerWaveDrag, TowerDiscretization, RNAMass, RotorLoads, GeometricConstraints
+from commonse.rna import RNAMass, RotorLoads
+from towerse.tower import TowerWindDrag, TowerWaveDrag, TowerDiscretization, GeometricConstraints, JacketPositioning
 
 
 class TestTowerWindDrag(unittest.TestCase):
@@ -83,8 +84,9 @@ class TestTowerDiscretization(unittest.TestCase):
         td.z = np.array([0.0, 0.5, 1.0])
         td.d = np.array([6.0, 4.935, 3.87])
         td.t = np.array([0.0351, 0.0299, 0.0247])
+        td.L_reinforced = np.array([29.2, 29.2, 29.2])
         td.n = np.array([10, 7])
-        td.n_reinforced = 3
+        # td.n_reinforced = 3
 
         check_gradient_unit_test(self, td)
 
@@ -96,13 +98,52 @@ class TestTowerDiscretization(unittest.TestCase):
         td.z = np.array([0.0, 0.5, 1.0])
         td.d = np.random.rand(3)
         td.t = np.random.rand(3)
+        td.L_reinforced = np.array([29.2, 29.2, 29.2])
         td.n = np.array([10, 7])
-        td.n_reinforced = 3
+        # td.n_reinforced = 3
 
         check_gradient_unit_test(self, td)
 
 
+    def test3(self):
 
+        td = TowerDiscretization()
+        td.towerHeight = 87.6
+        td.z = np.array([0.0, 0.5, 1.0])
+        td.d = np.array([6.0, 4.935, 3.87])
+        td.t = np.array([0.0351, 0.0299, 0.0247])
+        td.L_reinforced = np.array([29.2, 29.2, 29.2])
+        td.n = np.array([10, 7])
+
+        td.monopileHeight = 30.0
+        td.d_monopile = 6.0
+        td.t_monopile = 0.0351
+        td.n_monopile = 5
+
+        check_gradient_unit_test(self, td)
+
+class TestJacketPositioning(unittest.TestCase):
+
+    def test1(self):
+
+        jp = JacketPositioning()
+        # inputs
+        jp.sea_depth = 20.0
+        jp.tower_length = 87.6
+        jp.tower_to_shaft = 2.0
+        jp.monopile_extension = 5.0
+        jp.deck_height = 15.0
+        jp.d_monopile = 6.0
+        jp.t_monopile = 0.06
+        jp.t_jacket = 0.05
+        jp.d_tower_base = 6.0
+        jp.d_tower_top = 3.87
+        jp.t_tower_base = 0.027
+        jp.t_tower_top = 0.019
+
+        check_gradient_unit_test(self, jp, display=True)
+
+# TODO: move these to commonse tests - remove RNA content from tower
 class TestRNAMass(unittest.TestCase):
 
     def test1(self):
@@ -181,6 +222,21 @@ class TestRotorLoads(unittest.TestCase):
         check_gradient_unit_test(self, loads)
 
 
+    def test4(self):
+
+        loads = RotorLoads()
+        loads.F = [123.0, 101.0, -50.0]
+        loads.M = [4843.0, -2239.0, 1232.0]
+        loads.r_hub = [2.0, -3.2, 4.5]
+        loads.rna_cm = [-3.0, 1.6, -4.0]
+        loads.m_RNA = 200.0
+        loads.tilt = 13.2
+        loads.g = 9.81
+        loads.rna_weightM = False
+
+        check_gradient_unit_test(self, loads)
+
+
 
 
 class TestGeometricConstraints(unittest.TestCase):
@@ -197,4 +253,10 @@ class TestGeometricConstraints(unittest.TestCase):
 
 
 if __name__ == "__main__":
+
+    # fast = unittest.TestSuite()
+    # fast.addTest(TestTowerDiscretization('test3'))
+    # unittest.TextTestRunner().run(fast)
+
+
     unittest.main()

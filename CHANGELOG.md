@@ -20,7 +20,6 @@
 
 ## 0.1.2 ([12/04/2014])
 
-
 [Katherine Dykes](mailto: katherine.dykes@nrel.gov)
 
 [CHANGE]:
@@ -30,3 +29,24 @@
 - fixing some "utilization" variable issues
 
 - updating tower main section for new input set so that tower model main executes
+
+## 0.1.3 ([12/18/2014])
+
+[Andrew Ning](mailto: aning@byu.edu)
+
+[CHANGE]:
+
+- updated gradients to match the changes in 0.1.2 so all unit tests should pass
+
+
+## 0.1.4 ([12/04/2014])
+
+[Katherine Dykes](mailto: katherine.dykes@nrel.gov)
+
+[NEW]:
+
+- added TowerMonopileSE assembly and JacketPositioning component for crude representation of tower/jacket/monopile substructure
+
+[CHANGE]:
+
+- updated gradient tests to include test for new JacketPositioning component
