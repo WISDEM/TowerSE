@@ -45,9 +45,9 @@ def main(mytwr,util=False,savefileroot=[]):
         ax2.set_ylim(yrange);
 
         ax2.plot(mytwr.stress1, twr_z, label='VonMises Util1')
-        ax2.plot(mytwr.stress2, twr_z, label='VonMises Util1')
+        ax2.plot(mytwr.stress2, twr_z, label='VonMises Util2')
         ax2.plot(mytwr.shellBuckling1, twr_z, label='EUsh Util1')
-        ax2.plot(mytwr.shellBuckling2,twr_z, label='EUsh Util1')
+        ax2.plot(mytwr.shellBuckling2,twr_z, label='EUsh Util2')
         ax2.plot(mytwr.buckling1, twr_z, label='GL Util1')
         ax2.plot(mytwr.buckling2, twr_z, label='GL Util2')
         ax2.grid()
