@@ -9,7 +9,7 @@ Copyright (c) NREL. All rights reserved.
 
 from math import sqrt, cos, atan2, pi
 import numpy as np
-from commonse.utilities import CubicSplineSegment, cubic_spline_eval
+from commonse.utilities import CubicSplineSegment, cubic_spline_eval, smooth_max, smooth_min
 
 
 
@@ -106,20 +106,19 @@ def vonMisesStressUtilization(axial_stress, hoop_stress, shear_stress, gamma, si
     # stress margin
     stress_utilization = gamma * von_mises / sigma_y
 
-    return stress_utilization  #This must be <1 to pass
+    return stress_utilization  # This must be <1 to pass
 
 
-
-def hoopStressEurocode(windLoads, waveLoads, z, d, t, L_reinforced):
+def hoopStressEurocode(z, d, t, L_reinforced, q_dyn):
     """default method for computing hoop stress using Eurocode method"""
 
-    r = d/2.0-t/2.0
-
-    C_theta = 1.5
+    r = d/2.0-t/2.0  # radius of cylinder middle surface
     omega = L_reinforced/np.sqrt(r*t)
+
+    C_theta = 1.5  # clamped-clamped
     k_w = 0.46*(1.0 + 0.1*np.sqrt(C_theta/omega*r/t))
-    k_w = np.maximum(0.65, np.minimum(1.0, k_w))
-    q_dyn = np.interp(z, windLoads.z, windLoads.q) + np.interp(z, waveLoads.z, waveLoads.q)
+    kw = smooth_max(k_w, 0.65)
+    kw = smooth_min(k_w, 1.0)
     Peq = k_w*q_dyn
     hoop_stress = -Peq*r/t
 
@@ -190,9 +189,10 @@ def shellBucklingEurocode(d, t, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma
 
     n = len(d)
     EU_utilization = np.zeros(n)
-    sigma_z_sh=np.zeros(n)
-    sigma_t_sh=np.zeros(n)
-    tau_zt_sh=np.zeros(n)
+    sigma_z_sh = np.zeros(n)
+    sigma_t_sh = np.zeros(n)
+    tau_zt_sh = np.zeros(n)
+
     for i in range(n):
         h = L_reinforced[i]
 
@@ -211,14 +211,14 @@ def shellBucklingEurocode(d, t, sigma_z, sigma_t, tau_zt, L_reinforced, E, sigma
         sigma_t_shell = gamma_f*abs(sigma_t_shell)
         tau_zt_shell = gamma_f*abs(tau_zt_shell)
 
-        EU_utilization[i] = _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z_shell, sigma_t_shell, tau_zt_shell, E[i], sigma_y[i]) #this is utilization must be <1
+        EU_utilization[i] = _shellBucklingOneSection(h, r1, r2, t1, t2, gamma_b, sigma_z_shell, sigma_t_shell, tau_zt_shell, E[i], sigma_y[i])
 
         #make them into vectors
         sigma_z_sh[i]=sigma_z_shell
         sigma_t_sh[i]=sigma_t_shell
         tau_zt_sh[i]=tau_zt_shell
 
-    return EU_utilization
+    return EU_utilization  # this is utilization must be <1
 
 
 
