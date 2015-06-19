@@ -24,6 +24,9 @@ from commonse.utilities import sind, cosd  # , linspace_with_deriv, interp_with_
 from commonse.csystem import DirectionVector
 from commonse.environment import WindBase, WaveBase  # , SoilBase
 
+from fusedwind.turbine.tower import TowerFromCSProps
+from fusedwind.interface import implement_base
+
 from towerSupplement import fatigue, hoopStressEurocode, shellBucklingEurocode, \
     bucklingGL, vonMisesStressUtilization
 from akima import Akima
@@ -411,7 +414,7 @@ class CylindricalShellProperties(Component):
 
 
 
-
+@implement_base(TowerFromCSProps)
 class TowerFrame3DD(Component):
 
     # cross-sectional data along tower.
