@@ -50,3 +50,11 @@
 [CHANGE]:
 
 - updated gradient tests to include test for new JacketPositioning component
+
+## 0.1.5 ([07/08/2015])
+
+[Andrew Ning](mailto: aning@byu.edu)
+
+[CHANGE]:
+
+- significant changes made to overall tower.py structure: eliminated use of pBEAM (now only using frame3DD), eliminated separation of monopile from overall tower specification, restructured i/o for main tower assembly
