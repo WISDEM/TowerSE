@@ -12,7 +12,6 @@ setup(
     install_requires=['openmdao.main', 'commonse', 'pbeam'],
     package_dir={'': 'src'},
     packages=['towerse'],
-    version = '0.1.2',
     license='Apache License, Version 2.0',
     dependency_links=['https://github.com/WISDEM/pBEAM/tarball/master#egg=pbeam',
         'https://github.com/WISDEM/CommonSE/tarball/master#egg=commonse'],
