@@ -19,7 +19,7 @@ HISTORY:  2012 created
 import math
 import sys
 import numpy as np
-from openmdao.main.api import VariableTree, Component, Assembly
+from openmdao.main.api import VariableTree, Component, Assembly, set_as_top
 from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Bool, Slot
 
 #from commonse.utilities import linspace_with_deriv, interp_with_deriv, hstack, vstack
@@ -122,7 +122,7 @@ class CylindricalShellProperties(Component):
 
     def execute(self):
 
-        tube=Tube(d,t)
+        tube=Tube(self.d,self.t)
         self.Az = tube.Area
         self.Asx = tube.Asx
         self.Asy = tube.Asy
@@ -203,11 +203,11 @@ class TowerFrame3DD(Component):
     Mzz = Array(iotype='in', units='N*m', desc='point moment about z-axis')
 
     # combined wind-water distributed loads
-    WWloads = VarTree(FluidLoads(), iotype='in', desc='combined wind and wave loads')
-    ##Px   = Array(iotype='in', units='N/m', desc='force per unit length in x-direction')
-    ##Py   = Array(iotype='in', units='N/m', desc='force per unit length in y-direction')
-    ##Pz   = Array(iotype='in', units='N/m', desc='force per unit length in z-direction')
-    ##qdyn = Array(iotype='in', units='N/m**2', desc='dynamic pressure')
+    #WWloads = VarTree(FluidLoads(), iotype='in', desc='combined wind and wave loads')
+    Px   = Array(iotype='in', units='N/m', desc='force per unit length in x-direction')
+    Py   = Array(iotype='in', units='N/m', desc='force per unit length in y-direction')
+    Pz   = Array(iotype='in', units='N/m', desc='force per unit length in z-direction')
+    qdyn = Array(iotype='in', units='N/m**2', desc='dynamic pressure')
 
     # safety factors
     gamma_f = Float(1.35, iotype='in', desc='safety factor on loads')
@@ -329,7 +329,7 @@ class TowerFrame3DD(Component):
 
 
         # distributed loads
-        Px, Py, Pz = self.WWloads.Pz, self.WWloads.Py, -self.WWloads.Px  # switch to local c.s.
+        Px, Py, Pz = self.Pz, self.Py, -self.Px  # switch to local c.s.
         z = self.z
 
         # trapezoidally distributed loads
@@ -394,11 +394,11 @@ class TowerFrame3DD(Component):
         ##axial_stress = Fz/self.Az + Mxx/self.Ixx*y_stress - Myy/self.Iyy*x_stress
 #        V = Vy*x_stress/R - Vx*y_stress/R  # shear stress orthogonal to direction x,y
 #        shear_stress = 2. * V / self.Az  # coefficient of 2 for a hollow circular section, but should be conservative for other shapes
-        axial_stress = Fz/A - np.sqrt(Mxx**2+Myy**2)/Iyy*self.d/2.0  #More conservative, just use the tilted bending and add total max shear as well at the same point
-        shear_stress = 2. * np.sqrt(Vx**2+Vy**2) / A # coefficient of 2 for a hollow circular section, but should be conservative for other shapes
+        axial_stress = Fz/self.Az - np.sqrt(Mxx**2+Myy**2)/self.Iyy*self.d/2.0  #More conservative, just use the tilted bending and add total max shear as well at the same point, if you do not like it go back to the previous lines
+        shear_stress = 2. * np.sqrt(Vx**2+Vy**2) / self.Az # coefficient of 2 for a hollow circular section, but should be conservative for other shapes
 
         # hoop_stress (Eurocode method)
-        hoop_stress = hoopStressEurocode(self.z, self.d, self.t, self.L_reinforced, self.WWloads.qdyn)
+        hoop_stress = hoopStressEurocode(self.z, self.d, self.t, self.L_reinforced, self.qdyn)
 
         # von mises stress
         self.stress = vonMisesStressUtilization(axial_stress, hoop_stress, shear_stress,
@@ -416,11 +416,11 @@ class TowerFrame3DD(Component):
 
         # fatigue
         N_DEL = [365*24*3600*self.life]*len(z)
-        damage=np.zeros(z.size)
+        self.damage=np.zeros(z.size)
         if any(self.M_DEL):
             M_DEL = np.interp(z, self.z_DEL, self.M_DEL)
 
-            damage = fatigue(M_DEL, N_DEL, d, t, self.m_SN, self.DC, self.gamma_fatigue, stress_factor=1.0, weld_factor=True)
+            self.damage = fatigue(M_DEL, N_DEL, self.d, self.t, self.m_SN, self.DC, self.gamma_fatigue, stress_factor=1.0, weld_factor=True)
 
         # TODO: more hack NOT SURE WHAT THIS IS, but it was there originally, commented out for now
 #        damage = np.concatenate([np.zeros(len(self.z)-len(z)), damage])
@@ -452,12 +452,12 @@ class TowerSE(Assembly):
     wind_Uref2 = Float(iotype='in', units='m/s', desc='reference wind speed (usually at hub height)')
     wind_zref = Float(iotype='in', units='m', desc='corresponding reference height')
     wind_z0 = Float(0.0, iotype='in', units='m', desc='bottom of wind profile (height of ground/sea)')
-    wind_cd = Array(iotype='in', desc='Cd coefficient, if left blank it will be calculated based on cylinder Re')
+    wind_cd = Float(iotype='in', desc='Cd coefficient (it will be applied at all stations), if left blank it will be calculated based on cylinder Re')
 
     wave_rho = Float(1027.0, iotype='in', units='kg/m**3', desc='water density')
     wave_mu = Float(1.3351e-3, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of water')
     wave_cm = Float(2.0, iotype='in', desc='mass coefficient')
-    wave_cd = Array(iotype='in', desc='Cd coefficient, if left blank it will be calculated based on cylinder Re')
+    wave_cd = Float(iotype='in', desc='Cd coefficient (it will be applied at all stations), if left blank it will be calculated based on cylinder Re')
 
     yaw = Float(0.0, iotype='in', units='deg', desc='yaw angle')
 
@@ -707,11 +707,11 @@ class TowerSE(Assembly):
         self.connect('Mxx1', 'tower1.Mxx')
         self.connect('Myy1', 'tower1.Myy')
         self.connect('Mzz1', 'tower1.Mzz')
-        ##self.connect('distLoads1.Px',   'tower1.Px')
-        ##self.connect('distLoads1.Py',   'tower1.Py')
-        ##self.connect('distLoads1.Pz',   'tower1.Pz')
-        ##self.connect('distLoads1.qdyn', 'tower1.qdyn')
-        self.connect('distLoads1.outloads', 'tower1.WWloads')
+        self.connect('distLoads1.Px',   'tower1.Px')
+        self.connect('distLoads1.Py',   'tower1.Py')
+        self.connect('distLoads1.Pz',   'tower1.Pz')
+        self.connect('distLoads1.qdyn', 'tower1.qdyn')
+        #self.connect('distLoads1.outloads', 'tower1.WWloads')
 
         self.connect('gamma_f', 'tower1.gamma_f')
         self.connect('gamma_m', 'tower1.gamma_m')
@@ -775,11 +775,11 @@ class TowerSE(Assembly):
         self.connect('Mxx2', 'tower2.Mxx')
         self.connect('Myy2', 'tower2.Myy')
         self.connect('Mzz2', 'tower2.Mzz')
-        ##self.connect('distLoads2.Px', 'tower2.Px')
-        ##self.connect('distLoads2.Py', 'tower2.Py')
-        ##self.connect('distLoads2.Pz', 'tower2.Pz')
-        ##self.connect('distLoads2.qdyn', 'tower2.qdyn')
-        self.connect('distLoads2.outloads', 'tower2.WWloads')
+        self.connect('distLoads2.Px', 'tower2.Px')
+        self.connect('distLoads2.Py', 'tower2.Py')
+        self.connect('distLoads2.Pz', 'tower2.Pz')
+        self.connect('distLoads2.qdyn', 'tower2.qdyn')
+        #elf.connect('distLoads2.outloads', 'tower2.WWloads')
 
         self.connect('gamma_f', 'tower2.gamma_f')
         self.connect('gamma_m', 'tower2.gamma_m')
@@ -832,7 +832,7 @@ if __name__ == '__main__':
     # --- tower setup ------
     from commonse.environment import PowerWind
 
-    tower = TowerSE()
+    tower = set_as_top(TowerSE())
 
 
     # ---- tower ------
