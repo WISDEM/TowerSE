@@ -49,30 +49,64 @@ import frame3dd
 #  Components
 # -----------------
 
+#TODO need to check the length of each array
 class TowerDiscretization(Component):
     """discretize geometry into finite element nodes"""
 
     #inputs
 
-    # variables
-    z_param = Array(iotype='in', units='m', desc='parameterized locations along tower, linear lofting between')
-    d_param = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
-    t_param = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
-    z_full = Array(iotype='in', units='m', desc='locations along tower')
+    def __init__(self, numParam, numFull):
 
-    # out
-    d_full = Array(iotype='out', units='m', desc='tower diameter at corresponding locations')
-    t_full = Array(iotype='out', units='m', desc='shell thickness at corresponding locations')
+        super(TowerDiscretization, self).__init__()
 
+         # variables
+        self.add_param('z_param', np.zeros(numParam), units='m', desc='parameterized locations along tower, linear lofting between')
+        self.add_param('d_param', np.zeros(numParam), units='m', desc='tower diameter at corresponding locations')
+        self.add_param('t_param', np.zeros(numParam), units='m', desc='shell thickness at corresponding locations')
+        self.add_param('z_full', np.zeros(numFull), units='m', desc='locations along tower')
+
+        #out
+        self.add_output('d_full', np.zeros(numFull), units='m', desc='tower diameter at corresponding locations')
+        self.add_output('t_full', np.zeros(numFull), units='m', desc='shell thickness at corresponding locations')
+        """
+        z_param = Array(iotype='in', units='m', desc='parameterized locations along tower, linear lofting between')
+        d_param = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
+        t_param = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
+        z_full = Array(iotype='in', units='m', desc='locations along tower')
+
+        # out
+        d_full = Array(iotype='out', units='m', desc='tower diameter at corresponding locations')
+        t_full = Array(iotype='out', units='m', desc='shell thickness at corresponding locations')
+        
+
+        
     def execute(self):
 
         self.d_full = np.interp(self.z_full, self.z_param, self.d_param)
         self.t_full = np.interp(self.z_full, self.z_param, self.t_param)
+        """
+
+    def solve_nonlinear(self, params, unknowns, resids):
+
+        unknowns['d_full'] = np.interp(params['z_full'], params['z_param'], params['d_param'])
+        unknowns['t_full'] = np.interp(params['z_full'], params['z_param'], params['t_param'])
 
 
 class GeometricConstraints(Component):
     """docstring for OtherConstraints"""
 
+    def __init__(self, numSect):
+
+        super(GeometricConstraints, self).__init__()
+        self.add_param('d', np.zeros(numSect))
+        self.add_param('t', np.zeros(numSect))
+        self.add_param('min_d_to_t', 120.0)
+        self.add_param('min_taper', 0.4)
+
+        self.add_output('weldability', np.zeros(numSect))
+        self.add_output('manufacturability', np.zeros(numSect))
+        
+    """
     d = Array(iotype='in')
     t = Array(iotype='in')
     min_d_to_t = Float(120.0, iotype='in')
@@ -80,12 +114,24 @@ class GeometricConstraints(Component):
 
     weldability = Array(iotype='out')
     manufacturability = Array(iotype='out')
-
+    
     def execute(self):
 
         self.weldability = (self.min_d_to_t - self.d/self.t) / self.min_d_to_t
         manufacturability = self.min_taper - self.d[1:]/self.d[:-1]  # taper ratio)
         self.manufacturability = np.hstack((manufacturability, manufacturability[-1]))
+    """
+
+    def solve_nonlinear(self, params, unknowns, resids):
+
+        d = params['d']
+        t = params['t']
+        min_d_to_t = params['min_d_to_t']
+        min_taper = params['min_taper']
+
+        unknowns['weldability'] = (min_d_to_t-d/t)/min_d_to_t
+        manufacturability = min_taper-d[1:]/d[:-1] #taper ration
+        unknowns['manufacturabilty'] = np.hstack((manufacturability, manufacturability[-1]))
 
     # def list_deriv_vars(self):
 
@@ -110,6 +156,22 @@ class GeometricConstraints(Component):
 
 
 class CylindricalShellProperties(Component):
+    
+    def __init__(self, numParam)
+
+        super(CylindricalShellProperties, self).__init__()
+
+        self.add_param('d', np.zeros(numParam), units='m', desc='tower diameter at corresponding locations')
+        self.add_param('t', np.zeros(numParam), units='m', desc='shell thickness at corresponding locations')
+
+        self.add_output('Az', np.zeros(numParam), units='m**2', desc='cross-sectional area')
+        self.add_output('Asx', np.zeros(numParam), units='m**2', desc='x shear area')
+        self.add_output('Asy', np.zeros(numParam), units='m**2', desc='y shear area')
+        self.add_output('Jz', np.zeros(numParam), units='m**4', desc='polar moment of inertia')
+        self.add_output('Ixx', np.zeros(numParam), units='m**4', desc='area moment of inertia about x-axis')
+        self.add_output('Iyy', np.zeros(numParam), units='m**4', desc='area moment of inertia about y-axis')
+
+    """
     d = Array(iotype='in', units='m', desc='tower diameter at corresponding locations')
     t = Array(iotype='in', units='m', desc='shell thickness at corresponding locations')
 
@@ -129,6 +191,17 @@ class CylindricalShellProperties(Component):
         self.Jz = tube.J0
         self.Ixx = tube.Jxx
         self.Iyy = tube.Jyy
+    """
+    def solve_nonlinear(self, params, unknowns, resids):
+        
+        tube = Tube(params['d'],params['t'])
+
+        unknowns['Az'] = tube.Area 
+        unknowns['Asx'] = tube.Asx
+        unknowns['Asy'] = tube.Asy
+        unknowns['Jz'] = tube.J0
+        unknowns['Ixx'] = tube.Jxx
+        unknowns['Iyy'] = tube.Jyy
 
 ##        ro = self.d/2.0 + self.t/2.0
 ##        ri = self.d/2.0 - self.t/2.0
@@ -141,9 +214,27 @@ class CylindricalShellProperties(Component):
 
 
 
-@implement_base(TowerFromCSProps)
+@implement_base(TowerFromCSProps) #TODO What is this??
 class TowerFrame3DD(Component):
+    
+    def __init__(self, numParam):
+    
+        super(TowerFrame3DD, self).__init__()
+        # cross-sectional data along tower.
+        self.add_param('z', np.zeros(numParam), units='m', desc='location along tower. start at bottom and go to top')
+        self.add_param('Az', np.zeros(numParam), units='m**2', desc='cross-sectional area')
+        self.add_param('Asx', np.zeros(numParam), units='m**2', desc='x shear area')
+        self.add_param('Asy', np.zeros(numParam), units='m**2', desc='y shear area')
+        self.add_param('Jz', np.zeros(numParam), units='m**4', desc='polar moment of inertia')
+        self.add_param('Ixx', np.zeros(numParam), units='m**4', desc='area moment of inertia about x-axis')
+        self.add_param('Iyy', np.zeros(numParam), units='m**4', desc='area moment of inertia about y-axis')
 
+        self.add_param('E', np.zeros(numParam), units='N/m**2', desc='modulus of elasticity')
+        self.add_param('G', np.zeros(numParam), units='N/m**2', desc='shear modulus')
+        self.add_param('rho', np.zeros(numParam), units='kg/m**3', desc='material density')
+        self.add_param('sigma_y', np.zeros(numParam), units='N/m**2', desc='yield stress')
+
+    """
     # cross-sectional data along tower.
     z = Array(iotype='in', units='m', desc='location along tower.  start at bottom at go to top.')
     Az = Array(iotype='in', units='m**2', desc='cross-sectional area')
@@ -157,16 +248,34 @@ class TowerFrame3DD(Component):
     G = Array(iotype='in', units='N/m**2', desc='shear modulus')
     rho = Array(iotype='in', units='kg/m**3', desc='material density')
     sigma_y = Array(iotype='in', units='N/m**2', desc='yield stress')
+    """
+        # effective geometry -- used for handbook methods to estimate hoop stress, buckling, fatigue
+        # length should be one less than z
+        self.add_param('d', np.zeros(numParam-1), units='m', desc='effective tower diameter for section')
+        self.add_param('t', np.zeros(numParam-1), units='m', desc='effective shell thickness for section')
+        self.add_param('L_reinforced', np.zeros(numParam-1), units='m')
 
+    """
     # effective geometry -- used for handbook methods to estimate hoop stress, buckling, fatigue
     # length should be one less than z
     d = Array(iotype='in', units='m', desc='effective tower diameter for section')
     t = Array(iotype='in', units='m', desc='effective shell thickness for section')
     L_reinforced = Array(iotype='in', units='m')
+    """
 
     # locations where stress should be evaluated
-    theta_stress = Array(iotype='in', units='deg', desc='location along azimuth where stress should be evaluated.  0 corresponds to +x axis.  follows unit circle direction and c.s.')
+    #TODO LOOKS LIKE THIS ISN'T USED IN ANY CALCULATION? 
+    #theta_stress = Array(iotype='in', units='deg', desc='location along azimuth where stress should be evaluated.  0 corresponds to +x axis.  follows unit circle direction and c.s.')
 
+        # spring reaction data.  Use float('inf') for rigid constraints.
+        self.add_param('kidx', np.zeros(numParam), desc='indices of z where external stiffness reactions should be applied.')
+        self.add_param('kx', np.zeros(numParam), units='m', desc='spring stiffness in x-direction')
+        self.add_param('ky', np.zeros(numParam), units='m', desc='spring stiffness in y-direction')
+        self.add_param('kz', np.zeros(numParam), units='m', desc='spring stiffness in z-direction')
+        self.add_param('ktx', np.zeros(numParam), units='m', desc='spring stiffness in theta_x-rotation')
+        self.add_param('kty', np.zeros(numParam), units='m', desc='spring stiffness in theta_y-rotation')
+        self.add_param('ktz', np.zeros(numParam), units='m', desc='spring stiffness in theta_z-rotation')
+    """
     # spring reaction data.  Use float('inf') for rigid constraints.
     kidx = Array(iotype='in', desc='indices of z where external stiffness reactions should be applied.')
     kx = Array(iotype='in', units='m', desc='spring stiffness in x-direction')
@@ -175,7 +284,22 @@ class TowerFrame3DD(Component):
     ktx = Array(iotype='in', units='m', desc='spring stiffness in theta_x-rotation')
     kty = Array(iotype='in', units='m', desc='spring stiffness in theta_y-rotation')
     ktz = Array(iotype='in', units='m', desc='spring stiffness in theta_z-rotation')
+    """
+        # extra mass
+        self.add_param('midx', np.zeros(numParam), desc='indices where added mass should be applied.')
+        self.add_param('m', np.zeros(numParam), units='kg', desc='added mass')
+        self.add_param('mIxx', units='kg*m**2', desc='x mass moment of inertia about some point p')
+        self.add_param('mIyy', units='kg*m**2', desc='y mass moment of inertia about some point p')
+        self.add_param('mIzz', units='kg*m**2', desc='z mass moment of inertia about some point p')
+        self.add_param('mIxy', units='kg*m**2', desc='xy mass moment of inertia about some point p')
+        self.add_param('mIxz', units='kg*m**2', desc='xz mass moment of inertia about some point p')
+        self.add_param('mIyz', units='kg*m**2', desc='yz mass moment of inertia about some point p')
+        self.add_param('mrhox', units='m', desc='x-location of p relative to node')
+        self.add_param('mrhoy', units='m', desc='y-location of p relative to node')
+        self.add_param('mrhoz', units='m', desc='z-location of p relative to node')
+        self.add_param('addGravityLoadForExtraMass', True, desc='add gravitational load')
 
+    """
     # extra mass
     midx = Array(iotype='in', desc='indices where added mass should be applied.')
     m = Array(iotype='in', units='kg', desc='added mass')
@@ -189,10 +313,26 @@ class TowerFrame3DD(Component):
     mrhoy = Array(iotype='in', units='m', desc='y-location of p relative to node')
     mrhoz = Array(iotype='in', units='m', desc='z-location of p relative to node')
     addGravityLoadForExtraMass = Bool(True, iotype='in', desc='add gravitational load')
+    """
 
+
+        # gravitational load
+        self.add_param('g', 9.81, units='m/s**2', desc='acceleration of gravity (magnitude)')
+    """
     # gravitational load
     g = Float(9.81, iotype='in', units='m/s**2', desc='acceleration of gravity (magnitude)')
+    """
 
+        # point loads (if addGravityLoadForExtraMass=True be sure not to double count by adding those force here also)
+        self.add_param('plidx', numpy.zeros(numParam), desc='indices where point loads should be applied.')
+        self.add_param('Fx', numpy.zeros(numParam), units='N', desc='point force in x-direction')
+        self.add_param('Fy', numpy.zeros(numParam), units='N', desc='point force in y-direction')
+        self.add_param('Fz', numpy.zeros(numParam), units='N', desc='point force in z-direction')
+        self.add_param('Mxx', numpy.zeros(numParam), units='N*m', desc='point moment about x-axis')
+        self.add_param('Myy', numpy.zeros(numParam), units='N*m', desc='point moment about y-axis')
+        self.add_param('Mzz', numpy.zeros(numParam), units='N*m', desc='point moment about z-axis')
+
+    """
     # point loads (if addGravityLoadForExtraMass=True be sure not to double count by adding those force here also)
     plidx = Array(iotype='in', desc='indices where point loads should be applied.')
     Fx = Array(iotype='in', units='N', desc='point force in x-direction')
@@ -201,20 +341,47 @@ class TowerFrame3DD(Component):
     Mxx = Array(iotype='in', units='N*m', desc='point moment about x-axis')
     Myy = Array(iotype='in', units='N*m', desc='point moment about y-axis')
     Mzz = Array(iotype='in', units='N*m', desc='point moment about z-axis')
+    """
 
+        # combined wind-water distributed loads
+        #WWloads = VarTree(FluidLoads(), iotype='in', desc='combined wind and wave loads')
+        self.add_param('Px', numpy.zeros(numParam), units='N/m', desc='force per unit length in x-direction')
+        self.add_param('Py', numpy.zeros(numParam), units='N/m', desc='force per unit length in y-direction')
+        self.add_param('Pz', numpy.zeros(numParam), units='N/m', desc='force per unit length in z-direction')
+        self.add_param('qdyn', numpy.zeros(numParam), units='N/m**2', desc='dynamic pressure')
+
+    """
     # combined wind-water distributed loads
     #WWloads = VarTree(FluidLoads(), iotype='in', desc='combined wind and wave loads')
     Px   = Array(iotype='in', units='N/m', desc='force per unit length in x-direction')
     Py   = Array(iotype='in', units='N/m', desc='force per unit length in y-direction')
     Pz   = Array(iotype='in', units='N/m', desc='force per unit length in z-direction')
     qdyn = Array(iotype='in', units='N/m**2', desc='dynamic pressure')
+    """
 
+        # safety factors
+        self.add_param('gamma_f', 1.35, desc='safety factor on loads')
+        self.add_param('gamma_m', 1.1, desc='safety factor on materials')
+        self.add_param('gamma_n', 1.0, desc='safety factor on consequence of failure')
+        self.add_param('gamma_b', 1.1, desc='buckling safety factor')
+
+    """
     # safety factors
     gamma_f = Float(1.35, iotype='in', desc='safety factor on loads')
     gamma_m = Float(1.1, iotype='in', desc='safety factor on materials')
     gamma_n = Float(1.0, iotype='in', desc='safety factor on consequence of failure')
     gamma_b = Float(1.1, iotype='in', desc='buckling safety factor')
+    """
 
+        # fatigue parameters
+        self.add_param('life', 20.0, desc='fatigue life of tower')
+        self.add_param('m_SN', 4, desc='slope of S/N curve')
+        self.add_param('DC', 80.0, desc='standard value of stress')
+        self.add_param('gamma_fatigue', 1.755, desc='total safety factor for fatigue')
+        self.add_param('z_DEL', np.zeros(numParam))
+        self.add_param('M_DEL', np.zeros(numParam))
+
+    """
     # fatigue parameters
     life = Float(20.0, iotype='in', desc='fatigue life of tower')
     m_SN = Int(4, iotype='in', desc='slope of S/N curve')
@@ -222,7 +389,19 @@ class TowerFrame3DD(Component):
     gamma_fatigue = Float(1.755, iotype='in', desc='total safety factor for fatigue')
     z_DEL = Array(iotype='in')
     M_DEL = Array(iotype='in')
+    """
 
+        # options
+        self.add_param('shear', True, desc='include shear deformation')
+        self.add_param('geom', False, desc='include geometric stiffness')
+        self.add_param('dx', 5.0, desc='z-axis increment for internal forces')
+        self.add_param('nM', 2, desc='number of desired dynamic modes of vibration (below only necessary if nM > 0)')
+        self.add_param('Mmethod', 1, desc='1: subspace Jacobi, 2: Stodola')
+        self.add_param('lump', 0, desc='0: consistent mass, 1: lumped mass matrix')
+        self.add_param('tol', 1e-9, desc='mode shape tolerance')
+        self.add_param('shift', 0.0, desc='shift value ... for unrestrained structures')
+
+    """
     # options
     shear = Bool(True, iotype='in', desc='include shear deformation')
     geom = Bool(False, iotype='in', desc='include geometric stiffness')
@@ -232,7 +411,21 @@ class TowerFrame3DD(Component):
     lump = Int(0, iotype='in', desc='0: consistent mass, 1: lumped mass matrix')
     tol = Float(1e-9, iotype='in', desc='mode shape tolerance')
     shift = Float(0.0, iotype='in', desc='shift value ... for unrestrained structures')
+    """
 
+        # outputs
+        self.add_output('mass', 0.0)
+        self.add_output('f1', 0.0, units='Hz', desc='First natural frequency')
+        self.add_output('f2', 0.0, units='Hz', desc='Second natural frequency')
+        self.add_output('top_deflection', 0.0, units='m', desc='Deflection of tower top in yaw-aligned +x direction')
+        self.add_output('stress', np.zeros(numParam), units='N/m**2', desc='Von Mises stress utilization along tower at specified locations.  incudes safety factor.')
+        self.add_output('shell_buckling', np.zeros(numParam), desc='Shell buckling constraint.  Should be < 1 for feasibility.  Includes safety factors')
+        self.add_output('global_buckling', np.zeros(numParam), desc='Global buckling constraint.  Should be < 1 for feasibility.  Includes safety factors')
+        self.add_output('damage', np.zeros(numParam), desc='Fatigue damage at each tower section')
+        self.add_output('weldability', np.zeros(numParam))
+        self.add_output('manufacturability', np.zeros(numParam))
+
+    """
     # outputs
     mass = Float(iotype='out')
     f1 = Float(iotype='out', units='Hz', desc='First natural frequency')
@@ -244,16 +437,17 @@ class TowerFrame3DD(Component):
     damage = Array(iotype='out', desc='Fatigue damage at each tower section')
     weldability = Array(iotype='out')
     manufacturability = Array(iotype='out')
+    """
 
-
-    def execute(self):
+    # def execute(self):
+    def solve_nonlinear(self, params, unknowns, resids):
 
         # ------- node data ----------------
-        n = len(self.z)
+        z = params['z']
+        n = len(z)
         node = np.arange(1, n+1)
         x = np.zeros(n)
         y = np.zeros(n)
-        z = self.z
         r = np.zeros(n)
 
         nodes = frame3dd.NodeData(node, x, y, z, r)
@@ -265,7 +459,7 @@ class TowerFrame3DD(Component):
         node = self.kidx + 1  # add one because 0-based index but 1-based node numbering
         rigid = float('inf')
 
-        reactions = frame3dd.ReactionData(node, self.kx, self.ky, self.kz, self.ktx, self.kty, self.ktz, rigid)
+        reactions = frame3dd.ReactionData(node, params['kx'], params['ky'], params['kz'], params['ktx'], params['kty'], params['ktz'], rigid)
         # -----------------------------------
 
         # ------ frame element data ------------
@@ -276,15 +470,15 @@ class TowerFrame3DD(Component):
         roll = np.zeros(n-1)
 
         # average across element b.c. frame3dd uses constant section elements
-        Az = 0.5*(self.Az[:-1] + self.Az[1:])
-        Asx = 0.5*(self.Asx[:-1] + self.Asx[1:])
-        Asy = 0.5*(self.Asy[:-1] + self.Asy[1:])
-        Jz = 0.5*(self.Jz[:-1] + self.Jz[1:])
-        Ixx = 0.5*(self.Ixx[:-1] + self.Ixx[1:])
-        Iyy = 0.5*(self.Iyy[:-1] + self.Iyy[1:])
-        E = 0.5*(self.E[:-1] + self.E[1:])
-        G = 0.5*(self.G[:-1] + self.G[1:])
-        rho = 0.5*(self.rho[:-1] + self.rho[1:])
+        Az = 0.5*(params['Az'][:-1] + params['Az'][1:])
+        Asx = 0.5*(params['Asx'][:-1] + params['Asx'][1:])
+        Asy = 0.5*(params['Asy'][:-1] + params['Asy'][1:])
+        Jz = 0.5*(params['Jz'][:-1] + params['Jz'][1:])
+        Ixx = 0.5*(params['Ixx'][:-1] + params['Ixx'][1:])
+        Iyy = 0.5*(params['Iyy'][:-1] + params['Iyy'][1:])
+        E = 0.5*(params['E'][:-1] + params['E'][1:])
+        G = 0.5*(params['G'][:-1] + params['G'][1:])
+        rho = 0.5*(params['rho'][:-1] + params['rho'][1:])
 
         elements = frame3dd.ElementData(element, N1, N2, Az, Asx, Asy, Jz,
             Ixx, Iyy, E, G, roll, rho)
@@ -292,7 +486,7 @@ class TowerFrame3DD(Component):
 
 
         # ------ options ------------
-        options = frame3dd.Options(self.shear, self.geom, self.dx)
+        options = frame3dd.Options(params['shear'], params['geom'], params['dx'])
         # -----------------------------------
 
         # initialize frame3dd object
@@ -302,15 +496,15 @@ class TowerFrame3DD(Component):
         # ------ add extra mass ------------
 
         # extra node inertia data
-        N = self.midx + 1
+        N = params['midx'] + 1
 
-        tower.changeExtraNodeMass(N, self.m, self.mIxx, self.mIyy, self.mIzz, self.mIxy, self.mIxz, self.mIyz,
-            self.mrhox, self.mrhoy, self.mrhoz, self.addGravityLoadForExtraMass)
+        tower.changeExtraNodeMass(N, params['m'], params['mIxx'], params['mIyy'], params['mIzz'], params['mIxy'], params['mIxz'], params['mIyz'],
+            params['mrhox'], params['mrhoy'], params['mrhoz'], params['addGravityLoadForExtraMass'])
 
         # ------------------------------------
 
         # ------- enable dynamic analysis ----------
-        tower.enableDynamics(self.nM, self.Mmethod, self.lump, self.tol, self.shift)
+        tower.enableDynamics(params['nM'], params['Mmethod'], params['lump'], params['tol'], params['shift'])
         # ----------------------------
 
         # ------ static load case 1 ------------
@@ -318,19 +512,19 @@ class TowerFrame3DD(Component):
         # gravity in the X, Y, Z, directions (global)
         gx = 0.0
         gy = 0.0
-        gz = -self.g
+        gz = -params['g']
 
         load = frame3dd.StaticLoadCase(gx, gy, gz)
 
 
         # point loads
-        nF = self.plidx + 1
-        load.changePointLoads(nF, self.Fx, self.Fy, self.Fz, self.Mxx, self.Myy, self.Mzz)
+        nF = params['plidx'] + 1
+        load.changePointLoads(nF, params['Fx'], params['Fy'], params['Fz'], params['Mxx'], params['Myy'], params['Mzz'])
 
 
         # distributed loads
-        Px, Py, Pz = self.Pz, self.Py, -self.Px  # switch to local c.s.
-        z = self.z
+        Px, Py, Pz = params['Pz'], params['Py'], -params['Px']  # switch to local c.s.
+        z = params['z'] #TODO wasn't this already defined above?
 
         # trapezoidally distributed loads
         EL = np.arange(1, n)
@@ -359,14 +553,14 @@ class TowerFrame3DD(Component):
         iCase = 0
 
         # mass
-        self.mass = mass.struct_mass
+        unknowns['mass'] = mass.struct_mass
 
         # natural frequncies
-        self.f1 = modal.freq[0]
-        self.f2 = modal.freq[1]
+        unknowns['f1'] = modal.freq[0]
+        unknowns['f2'] = modal.freq[1]
 
         # deflections due to loading (from tower top and wind/wave loads)
-        self.top_deflection = displacements.dx[iCase, n-1]  # in yaw-aligned direction
+        unknowns['top_deflection'] = displacements.dx[iCase, n-1]  # in yaw-aligned direction
 
 
         # shear and bending (convert from local to global c.s.)
@@ -394,43 +588,43 @@ class TowerFrame3DD(Component):
         ##axial_stress = Fz/self.Az + Mxx/self.Ixx*y_stress - Myy/self.Iyy*x_stress
 #        V = Vy*x_stress/R - Vx*y_stress/R  # shear stress orthogonal to direction x,y
 #        shear_stress = 2. * V / self.Az  # coefficient of 2 for a hollow circular section, but should be conservative for other shapes
-        axial_stress = Fz/self.Az - np.sqrt(Mxx**2+Myy**2)/self.Iyy*self.d/2.0  #More conservative, just use the tilted bending and add total max shear as well at the same point, if you do not like it go back to the previous lines
-        shear_stress = 2. * np.sqrt(Vx**2+Vy**2) / self.Az # coefficient of 2 for a hollow circular section, but should be conservative for other shapes
+        axial_stress = Fz/params['Az'] - np.sqrt(Mxx**2+Myy**2)/params['Iyy']*params['d']/2.0  #More conservative, just use the tilted bending and add total max shear as well at the same point, if you do not like it go back to the previous lines
+        shear_stress = 2. * np.sqrt(Vx**2+Vy**2) / sparams['Az'] # coefficient of 2 for a hollow circular section, but should be conservative for other shapes
 
         # hoop_stress (Eurocode method)
-        hoop_stress = hoopStressEurocode(self.z, self.d, self.t, self.L_reinforced, self.qdyn)
+        hoop_stress = hoopStressEurocode(params['z'], params['d'], params['t'], params['L_reinforced'], params['qdyn'])
 
         # von mises stress
-        self.stress = vonMisesStressUtilization(axial_stress, hoop_stress, shear_stress,
-                      self.gamma_f*self.gamma_m*self.gamma_n, self.sigma_y)
+        unknowns['stress'] = vonMisesStressUtilization(axial_stress, hoop_stress, shear_stress,
+                      params['gamma_f']*params['gamma_m']*params['gamma_n'], params['sigma_y'])
 
         # shell buckling
-        self.shell_buckling = shellBucklingEurocode(self.d, self.t, axial_stress, hoop_stress,
-                      shear_stress, self.L_reinforced, self.E, self.sigma_y, self.gamma_f, self.gamma_b)
+        unknowns['shell_buckling'] = shellBucklingEurocode(params['d'], params['t'], axial_stress, hoop_stress,
+                      shear_stress, params['L_reinforced'], params['E'], params['sigma_y'], params['gamma_f'], params['gamma_b'])
 
         # global buckling
-        tower_height = self.z[-1] - self.z[0]
+        tower_height = params['z'][-1] - params['z'][0]
         M = np.sqrt(Mxx**2 + Myy**2)
-        self.global_buckling = bucklingGL(self.d, self.t, Fz, M, tower_height, self.E,
-            self.sigma_y, self.gamma_f, self.gamma_b)
+        unknowns['global_buckling'] = bucklingGL(params['d'], params['t'], Fz, M, tower_height, params['E'],
+            params['sigma_y'], params['gamma_f'], params['gamma_b'])
 
         # fatigue
-        N_DEL = [365*24*3600*self.life]*len(z)
-        self.damage=np.zeros(z.size)
-        if any(self.M_DEL):
-            M_DEL = np.interp(z, self.z_DEL, self.M_DEL)
+        N_DEL = [365*24*3600*params['life']]*len(z)
+        unknowns['damage']=np.zeros(z.size)
+        if any(params['M_DEL']):
+            M_DEL = np.interp(z, params['z_DEL'], params['M_DEL'])
 
-            self.damage = fatigue(M_DEL, N_DEL, self.d, self.t, self.m_SN, self.DC, self.gamma_fatigue, stress_factor=1.0, weld_factor=True)
+            unknowns['damage'] = fatigue(M_DEL, N_DEL, params['d'], params['t'], params['m_SN'], params['DC'], params['gamma_fatigue'], stress_factor=1.0, weld_factor=True)
 
         # TODO: more hack NOT SURE WHAT THIS IS, but it was there originally, commented out for now
 #        damage = np.concatenate([np.zeros(len(self.z)-len(z)), damage])
 
-
+        #TODO weldability and manufacturability??
 # -----------------
 #  Assembly
 # -----------------
 
-
+#TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO 
 
 class TowerSE(Assembly):
 
