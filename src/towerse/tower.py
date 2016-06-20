@@ -717,12 +717,13 @@ class TowerSE(Group):
 if __name__ == '__main__':
     # --- tower setup ------
     from commonse.environment import PowerWind
+    from commonse.environment import LogWind
 
     # --- geometry ----
     z_param = [0.0, 43.8, 87.6]
     d_param = [6.0, 4.935, 3.87]
     t_param = [0.027*1.3, 0.023*1.3, 0.019*1.3]
-    n = 15
+    n = 101
     z_full = np.linspace(0.0, 87.6, n)
     L_reinforced = 30.0*np.ones(n)  # [m] buckling length
     theta_stress = 0.0*np.ones(n)
@@ -813,10 +814,12 @@ if __name__ == '__main__':
     nPoints = len(z_param)
     nFull = len(z_full)
 
-    prob = Problem(root=TowerSE(nPoints, nFull, wind='PowerWind'))
+    prob = Problem(root=TowerSE(nPoints, nFull, wind='LogWind'))
 
     prob.setup()
 
+    #prob['wind1.shearExp'] = 0.2
+    #prob['wind2.shearExp'] = 0.2 
     
     # assign values to params
 
@@ -912,12 +915,13 @@ if __name__ == '__main__':
     # onshore (no waves)
     """
 
-    prob['wind1.shearExp'] = 0.2
-    prob['wind2.shearExp'] = 0.2    
+       
 
 
     # # --- run ---
     prob.run()
+
+    z = prob['z_full']
 
     print 'mass (kg) =', prob['tower1.mass']
     print 'f1 (Hz) =', prob['tower1.f1']
@@ -928,7 +932,7 @@ if __name__ == '__main__':
     # print 'manufacturability =', tower.manufacturability
     print 'stress1 =', prob['tower1.stress']
     print 'stress2 =', prob['tower2.stress']
-    print 'zs=', prob['z_full']
+    print 'zs=', z
     print 'ds=', prob['d_full']
     print 'ts=', prob['t_full']
     print 'GL buckling =', prob['tower1.global_buckling']
@@ -941,16 +945,28 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     plt.figure(figsize=(5.0, 3.5))
     plt.subplot2grid((3, 3), (0, 0), colspan=2, rowspan=3)
-    plt.plot(prob['tower1.stress'], prob['z_full'], label='stress1')
-    plt.plot(prob['tower2.stress'], prob['z_full'], label='stress2')
-    plt.plot(prob['tower1.shell_buckling'], prob['z_full'], label='shell buckling 1')
-    plt.plot(prob['tower2.shell_buckling'], prob['z_full'], label='shell buckling 2')
-    plt.plot(prob['tower1.global_buckling'], prob['z_full'], label='global buckling 1')
-    plt.plot(prob['tower2.global_buckling'], prob['z_full'], label='global buckling 2')
-    plt.plot(prob['tower1.damage'], prob['z_full'], label='damage')
+    plt.plot(prob['tower1.stress'], z, label='stress1')
+    plt.plot(prob['tower2.stress'], z, label='stress2')
+    plt.plot(prob['tower1.shell_buckling'], z, label='shell buckling 1')
+    plt.plot(prob['tower2.shell_buckling'], z, label='shell buckling 2')
+    plt.plot(prob['tower1.global_buckling'], z, label='global buckling 1')
+    plt.plot(prob['tower2.global_buckling'], z, label='global buckling 2')
+    plt.plot(prob['tower1.damage'], z, label='damage')
     plt.legend(bbox_to_anchor=(1.05, 1.0), loc=2)
     plt.xlabel('utilization')
     plt.ylabel('height along tower (m)')
+
+    #plt.figure(2)
+    #plt.plot(prob['d_full']/2.+max(prob['d_full']), z, 'ok')
+    #plt.plot(prob['d_full']/-2.+max(prob['d_full']), z, 'ok')
+
+    #fig = plt.figure(3)
+    #ax1 = fig.add_subplot(121)
+    #ax2 = fig.add_subplot(122)
+
+    #ax1.plot(prob['wind1.U'], z)
+    #ax2.plot(prob['wind2.U'], z)
+    #plt.tight_layout()
     plt.show()
     
     # ------------
