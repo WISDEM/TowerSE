@@ -17,16 +17,12 @@ HISTORY:  2012 created
  """
 
 import math
-import sys
 import numpy as np
 from openmdao.api import Component, Group, Problem
 
-#from commonse.utilities import linspace_with_deriv, interp_with_deriv, hstack, vstack
+from commonse.WindWaveDrag import AeroHydroLoads, TowerWindDrag, TowerWaveDrag
 
-#from commonse.WindWaveDrag import FluidLoads, AeroHydroLoads, TowerWindDrag, TowerWaveDrag
-from commonse.WindWaveDrag import AeroHydroLoads, TowerWindDrag, TowerWaveDrag #TODO FluidLoads isn't used anywhere (commented out in the code)
-
-from commonse.environment import WindBase, WaveBase  # , SoilBase
+from commonse.environment import WindBase, WaveBase, SoilBase, PowerWind, LogWind
 
 from commonse import Tube
 
@@ -98,10 +94,9 @@ class GeometricConstraints(Component):
         min_d_to_t = params['min_d_to_t']
         min_taper = params['min_taper']
 
-        #TODO TODO TODO TODO unknowns['weldability'] = (min_d_to_t-d/t)/min_d_to_t
-        #TODO TODO TODO TODO manufacturability = min_taper-d[1:]/d[:-1] #taper ration
-        #TODO TODO TODO TODO unknowns['manufacturabilty'] = np.hstack((manufacturability, manufacturability[-1]))
-
+        unknowns['weldability'] = (min_d_to_t-d/t)/min_d_to_t
+        manufacturability = min_taper-d[1:]/d[:-1] #taper ration
+        unknowns['manufacturability'] = np.hstack((manufacturability, manufacturability[-1]))
     # def list_deriv_vars(self):
 
     #     inputs = ('d', 't')
@@ -163,7 +158,7 @@ class CylindricalShellProperties(Component):
 
 
 
-#@implement_base(TowerFromCSProps) #TODO What is this??
+#@implement_base(TowerFromCSProps)
 class TowerFrame3DD(Component):
     
     def __init__(self, nFull):
@@ -188,10 +183,6 @@ class TowerFrame3DD(Component):
         self.add_param('d', np.zeros(nFull), units='m', desc='effective tower diameter for section')
         self.add_param('t', np.zeros(nFull), units='m', desc='effective shell thickness for section')
         self.add_param('L_reinforced', np.zeros(nFull), units='m') #TODO should these three be of length (nFull-1)?
-
-    # locations where stress should be evaluated
-    #TODO LOOKS LIKE THIS ISN'T USED IN ANY CALCULATION? 
-    #theta_stress = Array(iotype='in', units='deg', desc='location along azimuth where stress should be evaluated.  0 corresponds to +x axis.  follows unit circle direction and c.s.')
 
         # spring reaction data.  Use float('inf') for rigid constraints.
         self.add_param('kidx', np.zeros(nFull), desc='indices of z where external stiffness reactions should be applied.')
@@ -486,7 +477,7 @@ class TowerSE(Group):
         self.add('props', CylindricalShellProperties(nFull))
         self.add('tower1', TowerFrame3DD(nFull))
         self.add('tower2', TowerFrame3DD(nFull))
-        self.add('gc', GeometricConstraints(nPoints))
+        self.add('gc', GeometricConstraints(nFull))
     
         # connections to wind1
         self.connect('z_full', 'wind1.z')
@@ -692,8 +683,8 @@ class TowerSE(Group):
         self.connect('tower1.shift', 'tower2.shift')
 
         # connections to gc
-        self.connect('d_param', 'gc.d')
-        self.connect('t_param', 'gc.t')
+        self.connect('d_full', 'gc.d')
+        self.connect('t_full', 'gc.t')
 
 
         # outputs TODO
@@ -723,7 +714,7 @@ if __name__ == '__main__':
     z_param = [0.0, 43.8, 87.6]
     d_param = [6.0, 4.935, 3.87]
     t_param = [0.027*1.3, 0.023*1.3, 0.019*1.3]
-    n = 101
+    n = 15
     z_full = np.linspace(0.0, 87.6, n)
     L_reinforced = 30.0*np.ones(n)  # [m] buckling length
     theta_stress = 0.0*np.ones(n)
@@ -813,13 +804,18 @@ if __name__ == '__main__':
 
     nPoints = len(z_param)
     nFull = len(z_full)
+    wind = 'PowerWind'
 
-    prob = Problem(root=TowerSE(nPoints, nFull, wind='LogWind'))
-
+    prob = Problem(root=TowerSE(nPoints, nFull, wind=wind))
+    """
+    prob.driver.add_objective('tower1.mass', scaler=1E-6)
+    prob.driver.add_desvar('z_param', lower=np.zeros(nPoints), upper=np.ones(nPoints)*1000., scaler=1E-2)
+    """
     prob.setup()
 
-    #prob['wind1.shearExp'] = 0.2
-    #prob['wind2.shearExp'] = 0.2 
+    if wind=='PowerWind':
+        prob['wind1.shearExp'] = 0.2
+        prob['wind2.shearExp'] = 0.2 
     
     # assign values to params
 
@@ -928,8 +924,8 @@ if __name__ == '__main__':
     print 'f2 (Hz) =', prob['tower2.f2']
     print 'top_deflection1 (m) =', prob['tower1.top_deflection']
     print 'top_deflection2 (m) =', prob['tower2.top_deflection']
-    # print 'weldability =', tower.weldability
-    # print 'manufacturability =', tower.manufacturability
+    #print 'weldability =', prob['gc.weldability']
+    print 'manufacturability =', prob['gc.manufacturability']
     print 'stress1 =', prob['tower1.stress']
     print 'stress2 =', prob['tower2.stress']
     print 'zs=', z
