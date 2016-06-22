@@ -121,7 +121,7 @@ if __name__ == '__main__':
 
     nPoints = len(z_param)
     nFull = len(z_full)
-    wind = 'LogWind'
+    wind = 'PowerWind'
 
     prob = Problem(root=TowerSE(nPoints, nFull, wind=wind))
     
@@ -269,13 +269,13 @@ if __name__ == '__main__':
     #plt.plot(prob['t_full']/2.+max(prob['t_full']), z, 'ok')
     #plt.plot(max(prob['t_full'])-prob['t_full']/2., z, 'ok')
 
-    #fig = plt.figure(3)
-    #ax1 = fig.add_subplot(121)
-    #ax2 = fig.add_subplot(122)
+    fig = plt.figure(3)
+    ax1 = fig.add_subplot(121)
+    ax2 = fig.add_subplot(122)
 
-    #ax1.plot(prob['wind1.U'], z)
-    #ax2.plot(prob['wind2.U'], z)
-    #plt.tight_layout()
+    ax1.plot(prob['wind1.U'], z)
+    ax2.plot(prob['wind2.U'], z)
+    plt.tight_layout()
 
     plt.show()
     

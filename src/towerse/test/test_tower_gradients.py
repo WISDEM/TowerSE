@@ -11,7 +11,7 @@ import unittest
 import numpy as np
 from commonse.utilities import check_gradient, check_gradient_unit_test
 from commonse.rna import RNAMass, RotorLoads
-from towerse.tower import TowerWindDrag, TowerWaveDrag, TowerDiscretization, GeometricConstraints, JacketPositioning
+from towerse.tower import TowerWindDrag, TowerWaveDrag, TowerDiscretization, GeometricConstraints#, JacketPositioning
 
 
 class TestTowerWindDrag(unittest.TestCase):
