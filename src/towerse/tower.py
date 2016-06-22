@@ -64,7 +64,7 @@ class TowerDiscretization(Component):
         #out
         self.add_output('d_full', np.zeros(nFull), units='m', desc='tower diameter at corresponding locations')
         self.add_output('t_full', np.zeros(nFull), units='m', desc='shell thickness at corresponding locations')
-        
+
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -75,16 +75,16 @@ class TowerDiscretization(Component):
 class GeometricConstraints(Component):
     """docstring for OtherConstraints"""
 
-    def __init__(self, nPoints):
+    def __init__(self, nFull):
 
         super(GeometricConstraints, self).__init__()
-        self.add_param('d', np.zeros(nPoints), units='m')
-        self.add_param('t', np.zeros(nPoints), units='m')
+        self.add_param('d', np.zeros(nFull), units='m')
+        self.add_param('t', np.zeros(nFull), units='m')
         self.add_param('min_d_to_t', 120.0)
         self.add_param('min_taper', 0.4)
 
-        self.add_output('weldability', np.zeros(nPoints))
-        self.add_output('manufacturability', np.zeros(nPoints))
+        self.add_output('weldability', np.zeros(nFull))
+        self.add_output('manufacturability', np.zeros(nFull))
 
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -120,7 +120,7 @@ class GeometricConstraints(Component):
 
 
 class CylindricalShellProperties(Component):
-    
+
     def __init__(self, nFull):
 
         super(CylindricalShellProperties, self).__init__()
@@ -135,12 +135,12 @@ class CylindricalShellProperties(Component):
         self.add_output('Ixx', np.zeros(nFull), units='m**4', desc='area moment of inertia about x-axis')
         self.add_output('Iyy', np.zeros(nFull), units='m**4', desc='area moment of inertia about y-axis')
 
-   
+
     def solve_nonlinear(self, params, unknowns, resids):
-        
+
         tube = Tube(params['d'],params['t'])
 
-        unknowns['Az'] = tube.Area 
+        unknowns['Az'] = tube.Area
         unknowns['Asx'] = tube.Asx
         unknowns['Asy'] = tube.Asy
         unknowns['Jz'] = tube.J0
@@ -160,9 +160,9 @@ class CylindricalShellProperties(Component):
 
 #@implement_base(TowerFromCSProps)
 class TowerFrame3DD(Component):
-    
-    def __init__(self, nFull):
-    
+
+    def __init__(self, nFull, nK, nM, nPL, nDEL):
+
         super(TowerFrame3DD, self).__init__()
         # cross-sectional data along tower.
         self.add_param('z', np.zeros(nFull), units='m', desc='location along tower. start at bottom and go to top')
@@ -185,26 +185,26 @@ class TowerFrame3DD(Component):
         self.add_param('L_reinforced', np.zeros(nFull), units='m') #TODO should these three be of length (nFull-1)?
 
         # spring reaction data.  Use float('inf') for rigid constraints.
-        self.add_param('kidx', np.zeros(nFull), desc='indices of z where external stiffness reactions should be applied.')
-        self.add_param('kx', np.zeros(nFull), units='m', desc='spring stiffness in x-direction')
-        self.add_param('ky', np.zeros(nFull), units='m', desc='spring stiffness in y-direction')
-        self.add_param('kz', np.zeros(nFull), units='m', desc='spring stiffness in z-direction')
-        self.add_param('ktx', np.zeros(nFull), units='m', desc='spring stiffness in theta_x-rotation')
-        self.add_param('kty', np.zeros(nFull), units='m', desc='spring stiffness in theta_y-rotation')
-        self.add_param('ktz', np.zeros(nFull), units='m', desc='spring stiffness in theta_z-rotation')
- 
+        self.add_param('kidx', np.zeros(nK), desc='indices of z where external stiffness reactions should be applied.')
+        self.add_param('kx', np.zeros(nK), units='m', desc='spring stiffness in x-direction')
+        self.add_param('ky', np.zeros(nK), units='m', desc='spring stiffness in y-direction')
+        self.add_param('kz', np.zeros(nK), units='m', desc='spring stiffness in z-direction')
+        self.add_param('ktx', np.zeros(nK), units='m', desc='spring stiffness in theta_x-rotation')
+        self.add_param('kty', np.zeros(nK), units='m', desc='spring stiffness in theta_y-rotation')
+        self.add_param('ktz', np.zeros(nK), units='m', desc='spring stiffness in theta_z-rotation')
+
         # extra mass
-        self.add_param('midx', np.zeros(nFull), desc='indices where added mass should be applied.')
-        self.add_param('m', np.zeros(nFull), units='kg', desc='added mass')
-        self.add_param('mIxx', np.zeros(nFull), units='kg*m**2', desc='x mass moment of inertia about some point p')
-        self.add_param('mIyy', np.zeros(nFull), units='kg*m**2', desc='y mass moment of inertia about some point p')
-        self.add_param('mIzz', np.zeros(nFull), units='kg*m**2', desc='z mass moment of inertia about some point p')
-        self.add_param('mIxy', np.zeros(nFull), units='kg*m**2', desc='xy mass moment of inertia about some point p')
-        self.add_param('mIxz', np.zeros(nFull), units='kg*m**2', desc='xz mass moment of inertia about some point p')
-        self.add_param('mIyz', np.zeros(nFull), units='kg*m**2', desc='yz mass moment of inertia about some point p')
-        self.add_param('mrhox', np.zeros(nFull), units='m', desc='x-location of p relative to node')
-        self.add_param('mrhoy', np.zeros(nFull), units='m', desc='y-location of p relative to node')
-        self.add_param('mrhoz', np.zeros(nFull), units='m', desc='z-location of p relative to node')
+        self.add_param('midx', np.zeros(nM), desc='indices where added mass should be applied.')
+        self.add_param('m', np.zeros(nM), units='kg', desc='added mass')
+        self.add_param('mIxx', np.zeros(nM), units='kg*m**2', desc='x mass moment of inertia about some point p')
+        self.add_param('mIyy', np.zeros(nM), units='kg*m**2', desc='y mass moment of inertia about some point p')
+        self.add_param('mIzz', np.zeros(nM), units='kg*m**2', desc='z mass moment of inertia about some point p')
+        self.add_param('mIxy', np.zeros(nM), units='kg*m**2', desc='xy mass moment of inertia about some point p')
+        self.add_param('mIxz', np.zeros(nM), units='kg*m**2', desc='xz mass moment of inertia about some point p')
+        self.add_param('mIyz', np.zeros(nM), units='kg*m**2', desc='yz mass moment of inertia about some point p')
+        self.add_param('mrhox', np.zeros(nM), units='m', desc='x-location of p relative to node')
+        self.add_param('mrhoy', np.zeros(nM), units='m', desc='y-location of p relative to node')
+        self.add_param('mrhoz', np.zeros(nM), units='m', desc='z-location of p relative to node')
         self.add_param('addGravityLoadForExtraMass', True, desc='add gravitational load')
 
 
@@ -212,13 +212,13 @@ class TowerFrame3DD(Component):
         self.add_param('g', 9.81, units='m/s**2', desc='acceleration of gravity (magnitude)')
 
         # point loads (if addGravityLoadForExtraMass=True be sure not to double count by adding those force here also)
-        self.add_param('plidx', np.zeros(nFull), desc='indices where point loads should be applied.')
-        self.add_param('Fx', np.zeros(nFull), units='N', desc='point force in x-direction')
-        self.add_param('Fy', np.zeros(nFull), units='N', desc='point force in y-direction')
-        self.add_param('Fz', np.zeros(nFull), units='N', desc='point force in z-direction')
-        self.add_param('Mxx', np.zeros(nFull), units='N*m', desc='point moment about x-axis')
-        self.add_param('Myy', np.zeros(nFull), units='N*m', desc='point moment about y-axis')
-        self.add_param('Mzz', np.zeros(nFull), units='N*m', desc='point moment about z-axis')
+        self.add_param('plidx', np.zeros(nPL), desc='indices where point loads should be applied.')
+        self.add_param('Fx', np.zeros(nPL), units='N', desc='point force in x-direction')
+        self.add_param('Fy', np.zeros(nPL), units='N', desc='point force in y-direction')
+        self.add_param('Fz', np.zeros(nPL), units='N', desc='point force in z-direction')
+        self.add_param('Mxx', np.zeros(nPL), units='N*m', desc='point moment about x-axis')
+        self.add_param('Myy', np.zeros(nPL), units='N*m', desc='point moment about y-axis')
+        self.add_param('Mzz', np.zeros(nPL), units='N*m', desc='point moment about z-axis')
 
         # combined wind-water distributed loads
         #WWloads = VarTree(FluidLoads(), iotype='in', desc='combined wind and wave loads')
@@ -238,8 +238,9 @@ class TowerFrame3DD(Component):
         self.add_param('m_SN', 4, desc='slope of S/N curve')
         self.add_param('DC', 80.0, desc='standard value of stress')
         self.add_param('gamma_fatigue', 1.755, desc='total safety factor for fatigue')
-        self.add_param('z_DEL', np.zeros(nFull))
-        self.add_param('M_DEL', np.zeros(nFull))
+        self.add_param('z_DEL', np.zeros(nDEL), desc='absolute z coordinates of corresponding fatigue parameters')
+        self.add_param('M_DEL', np.zeros(nDEL), desc='fatigue parameters at corresponding z coordinates')
+        #TODO should make z relative to the height of the turbine
 
         # options
         self.add_param('shear', True, desc='include shear deformation')
@@ -280,7 +281,7 @@ class TowerFrame3DD(Component):
         # ------ reaction data ------------
 
         # rigid base
-        node = params['kidx'] + np.ones(n)  # add one because 0-based index but 1-based node numbering
+        node = params['kidx'] + np.ones(len(params['kidx']))  # add one because 0-based index but 1-based node numbering
         rigid = float('inf')
 
         reactions = frame3dd.ReactionData(node, params['kx'], params['ky'], params['kz'], params['ktx'], params['kty'], params['ktz'], rigid)
@@ -320,7 +321,7 @@ class TowerFrame3DD(Component):
         # ------ add extra mass ------------
 
         # extra node inertia data
-        N = params['midx'] #+ np.ones(n)
+        N = params['midx'] + np.ones(len(params['midx']))
 
         tower.changeExtraNodeMass(N, params['m'], params['mIxx'], params['mIyy'], params['mIzz'], params['mIxy'], params['mIxz'], params['mIyz'],
             params['mrhox'], params['mrhoy'], params['mrhoz'], params['addGravityLoadForExtraMass'])
@@ -342,12 +343,13 @@ class TowerFrame3DD(Component):
 
 
         # point loads
-        nF = params['plidx'] + np.ones(n)
+        nF = params['plidx'] + np.ones(len(params['plidx']))
         load.changePointLoads(nF, params['Fx'], params['Fy'], params['Fz'], params['Mxx'], params['Myy'], params['Mzz'])
 
 
         # distributed loads
         Px, Py, Pz = params['Pz'], params['Py'], -params['Px']  # switch to local c.s.
+        z = params['z']
 
         # trapezoidally distributed loads
         EL = np.arange(1, n)
@@ -449,11 +451,11 @@ class TowerFrame3DD(Component):
 
 class TowerSE(Group):
 
-    def __init__(self, nPoints, nFull, wind=''):
+    def __init__(self, nPoints, nFull, nK, nM, nPL, nDEL, wind=''):
 
         super(TowerSE, self).__init__()
-        
-        self.fd_options['force_fd'] = True       
+
+        self.fd_options['force_fd'] = True
 
         self.add('geometry', TowerDiscretization(nPoints, nFull), promotes=['*'])
         # two load cases.  TODO: use a case iterator
@@ -475,13 +477,13 @@ class TowerSE(Group):
         self.add('distLoads1', AeroHydroLoads(nFull))
         self.add('distLoads2', AeroHydroLoads(nFull))
         self.add('props', CylindricalShellProperties(nFull))
-        self.add('tower1', TowerFrame3DD(nFull))
-        self.add('tower2', TowerFrame3DD(nFull))
+        self.add('tower1', TowerFrame3DD(nFull, nK, nM, nPL, nDEL))
+        self.add('tower2', TowerFrame3DD(nFull, nK, nM, nPL, nDEL))
         self.add('gc', GeometricConstraints(nFull))
-    
+
         # connections to wind1
         self.connect('z_full', 'wind1.z')
-     
+
         # connections to wind2
         self.connect('z_full', 'wind2.z')
 
@@ -585,7 +587,7 @@ class TowerSE(Group):
         self.connect('waveLoads2.waveLoads:qdyn0', 'distLoads2.waveLoads:qdyn0')
         self.connect('waveLoads2.waveLoads:beta0', 'distLoads2.waveLoads:beta0')
         self.connect('z_full', 'distLoads2.z')
-        
+
         # connect yaw
         self.connect('distLoads1.yaw', 'distLoads2.yaw')
 
@@ -601,10 +603,10 @@ class TowerSE(Group):
         self.connect('props.Jz', 'tower1.Jz')
         self.connect('props.Ixx', 'tower1.Ixx')
         self.connect('props.Iyy', 'tower1.Iyy')
-      
+
         self.connect('d_full', 'tower1.d')
         self.connect('t_full', 'tower1.t')
-        
+
         self.connect('distLoads1.Px',   'tower1.Px')
         self.connect('distLoads1.Py',   'tower1.Py')
         self.connect('distLoads1.Pz',   'tower1.Pz')
@@ -619,10 +621,10 @@ class TowerSE(Group):
         self.connect('props.Jz', 'tower2.Jz')
         self.connect('props.Ixx', 'tower2.Ixx')
         self.connect('props.Iyy', 'tower2.Iyy')
-        
+
         self.connect('d_full', 'tower2.d')
         self.connect('t_full', 'tower2.t')
-        
+
         self.connect('distLoads2.Px', 'tower2.Px')
         self.connect('distLoads2.Py', 'tower2.Py')
         self.connect('distLoads2.Pz', 'tower2.Pz')
@@ -656,13 +658,7 @@ class TowerSE(Group):
         self.connect('tower1.mrhoz', 'tower2.mrhoz')
         self.connect('tower1.addGravityLoadForExtraMass', 'tower2.addGravityLoadForExtraMass')
         self.connect('tower1.g', 'tower2.g')
-        #self.connect('tower1.plidx', 'tower2.plidx')
-        #self.connect('tower1.Fx', 'tower2.Fx')
-        #self.connect('tower1.Fy', 'tower2.Fy')
-        #self.connect('tower1.Fz', 'tower2.Fz')
-        #self.connect('tower1.Mxx', 'tower2.Mxx')
-        #self.connect('tower1.Myy', 'tower2.Myy')
-        #self.connect('tower1.Mzz', 'tower2.Mzz')
+
         self.connect('tower1.gamma_f', 'tower2.gamma_f')
         self.connect('tower1.gamma_m', 'tower2.gamma_m')
         self.connect('tower1.gamma_n', 'tower2.gamma_n')
@@ -734,6 +730,7 @@ if __name__ == '__main__':
     ktx = np.array([float('inf')])
     kty = np.array([float('inf')])
     ktz = np.array([float('inf')])
+    nK = len(kidx)
 
     # --- extra mass ----
     midx = np.array([n-1])  # RNA mass at top
@@ -747,12 +744,14 @@ if __name__ == '__main__':
     mrhox = [-1.13197635]
     mrhoy = [0.]
     mrhoz = [0.50875268]
+    nM = len(midx)
     addGravityLoadForExtraMass = True
     # -----------
 
     # --- wind ---
     wind_zref = 90.0
     wind_z0 = 0.0
+    shearExp = 0.2
     # ---------------
 
     # if addGravityLoadForExtraMass=True be sure not to double count by adding those force here also
@@ -765,6 +764,7 @@ if __name__ == '__main__':
     Mxx1 = [3963732.76208099]
     Myy1 = [-2275104.79420872]
     Mzz1 = [-346781.68192839]
+    nPL = len(plidx1)
     # # ---------------
 
     # # --- loading case 2: max wind speed ---
@@ -788,10 +788,12 @@ if __name__ == '__main__':
     # --- fatigue ---
     z_DEL = np.array([0.000, 1.327, 3.982, 6.636, 9.291, 11.945, 14.600, 17.255, 19.909, 22.564, 25.218, 27.873, 30.527, 33.182, 35.836, 38.491, 41.145, 43.800, 46.455, 49.109, 51.764, 54.418, 57.073, 59.727, 62.382, 65.036, 67.691, 70.345, 73.000, 75.655, 78.309, 80.964, 83.618, 86.273, 87.600])
     M_DEL = 1e3*np.array([8.2940E+003, 8.1518E+003, 7.8831E+003, 7.6099E+003, 7.3359E+003, 7.0577E+003, 6.7821E+003, 6.5119E+003, 6.2391E+003, 5.9707E+003, 5.7070E+003, 5.4500E+003, 5.2015E+003, 4.9588E+003, 4.7202E+003, 4.4884E+003, 4.2577E+003, 4.0246E+003, 3.7942E+003, 3.5664E+003, 3.3406E+003, 3.1184E+003, 2.8977E+003, 2.6811E+003, 2.4719E+003, 2.2663E+003, 2.0673E+003, 1.8769E+003, 1.7017E+003, 1.5479E+003, 1.4207E+003, 1.3304E+003, 1.2780E+003, 1.2673E+003, 1.2761E+003])
+    nDEL = len(z_DEL)
     gamma_fatigue = 1.35*1.3*1.0
     life = 20.0
     m_SN = 4
     # ---------------
+
 
     # --- constraints ---
     min_d_to_t = 120.0
@@ -806,7 +808,7 @@ if __name__ == '__main__':
     nFull = len(z_full)
     wind = 'PowerWind'
 
-    prob = Problem(root=TowerSE(nPoints, nFull, wind=wind))
+    prob = Problem(root=TowerSE(nPoints, nFull, nK, nM, nPL, nDEL, wind=wind))
     """
     prob.driver.add_objective('tower1.mass', scaler=1E-6)
     prob.driver.add_desvar('z_param', lower=np.zeros(nPoints), upper=np.ones(nPoints)*1000., scaler=1E-2)
@@ -814,9 +816,9 @@ if __name__ == '__main__':
     prob.setup()
 
     if wind=='PowerWind':
-        prob['wind1.shearExp'] = 0.2
-        prob['wind2.shearExp'] = 0.2 
-    
+        prob['wind1.shearExp'] = shearExp
+        prob['wind2.shearExp'] = shearExp
+
     # assign values to params
 
     # --- geometry ----
@@ -911,7 +913,7 @@ if __name__ == '__main__':
     # onshore (no waves)
     """
 
-       
+
 
 
     # # --- run ---
@@ -936,7 +938,7 @@ if __name__ == '__main__':
     print 'Shell buckling =', prob['tower1.shell_buckling']
     print 'Shell buckling =', prob['tower2.shell_buckling']
     print 'damage =', prob['tower1.damage']
-    
+
 
     import matplotlib.pyplot as plt
     plt.figure(figsize=(5.0, 3.5))
@@ -964,7 +966,7 @@ if __name__ == '__main__':
     #ax2.plot(prob['wind2.U'], z)
     #plt.tight_layout()
     plt.show()
-    
+
     # ------------
 
     """
@@ -1016,4 +1018,3 @@ if __name__ == '__main__':
         tower.run()
         # ---------------
     """
-
