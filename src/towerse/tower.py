@@ -277,6 +277,7 @@ class TowerFrame3DD(Component):
         r = np.zeros(n)
 
         nodes = frame3dd.NodeData(node, x, y, z, r)
+        print 'nodes: ', nodes
         # -----------------------------------
 
         # ------ reaction data ------------
@@ -286,6 +287,7 @@ class TowerFrame3DD(Component):
         rigid = float('inf')
 
         reactions = frame3dd.ReactionData(node, params['kx'], params['ky'], params['kz'], params['ktx'], params['kty'], params['ktz'], rigid)
+        print 'reactions: ', reactions
         # -----------------------------------
 
         # ------ frame element data ------------
@@ -308,6 +310,8 @@ class TowerFrame3DD(Component):
 
         elements = frame3dd.ElementData(element, N1, N2, Az, Asx, Asy, Jz,
             Ixx, Iyy, E, G, roll, rho)
+
+        print 'elements: ', elements
         # -----------------------------------
 
 
@@ -350,10 +354,6 @@ class TowerFrame3DD(Component):
 
         # distributed loads
         Px, Py, Pz = params['Pz'], params['Py'], -params['Px']  # switch to local c.s.
-        print '*****************************************************'
-        print 'Px: ', Px
-        print 'Py: ', Py
-        print 'Pz: ', Pz
         z = params['z']
 
         # trapezoidally distributed loads
@@ -371,20 +371,6 @@ class TowerFrame3DD(Component):
         wz1 = Pz[:-1]
         wz2 = Pz[1:]
 
-        print 'EL: ', EL
-        print 'xx1: ', xx1
-        print 'xx2: ', xx2
-        print 'wx1: ', wx1
-        print 'wx2: ', wx2
-        print 'xy1: ', xy1
-        print 'xy2: ', xy2
-        print 'wy1: ', wy1
-        print 'wy2: ', wy2
-        print 'xz1: ', xz1
-        print 'xz2: ', xz2
-        print 'wz1: ', wz1
-        print 'wz2: ', wz2
-
         load.changeTrapezoidalLoads(EL, xx1, xx2, wx1, wx2, xy1, xy2, wy1, wy2, xz1, xz2, wz1, wz2)
 
         tower.addLoadCase(load)
@@ -394,13 +380,6 @@ class TowerFrame3DD(Component):
 
         # run the analysis
         displacements, forces, reactions, internalForces, mass, modal = tower.run()
-        print '*****************************************************'
-        print 'displacements: ', displacements
-        print 'forces: ', forces
-        print 'reactions: ', reactions
-        print 'internalForces: ', internalForces
-        print 'mass: ', mass
-        print 'modal: ', modal
         iCase = 0
 
         # mass
