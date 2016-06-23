@@ -277,17 +277,15 @@ class TowerFrame3DD(Component):
         r = np.zeros(n)
 
         nodes = frame3dd.NodeData(node, x, y, z, r)
-        print 'nodes: ', nodes
         # -----------------------------------
 
         # ------ reaction data ------------
 
         # rigid base
-        node = params['kidx'] + np.ones(len(params['kidx']))  # add one because 0-based index but 1-based node numbering
+        node = params['kidx'] + np.ones(len(params['kidx']), dtype=int)  # add one because 0-based index but 1-based node numbering
         rigid = float('inf')
 
         reactions = frame3dd.ReactionData(node, params['kx'], params['ky'], params['kz'], params['ktx'], params['kty'], params['ktz'], rigid)
-        print 'reactions: ', reactions
         # -----------------------------------
 
         # ------ frame element data ------------
@@ -310,8 +308,6 @@ class TowerFrame3DD(Component):
 
         elements = frame3dd.ElementData(element, N1, N2, Az, Asx, Asy, Jz,
             Ixx, Iyy, E, G, roll, rho)
-
-        print 'elements: ', elements
         # -----------------------------------
 
 
@@ -326,7 +322,7 @@ class TowerFrame3DD(Component):
         # ------ add extra mass ------------
 
         # extra node inertia data
-        N = params['midx'] + np.ones(len(params['midx']))
+        N = params['midx'] + np.ones(len(params['midx']), dtype=int)
 
         tower.changeExtraNodeMass(N, params['m'], params['mIxx'], params['mIyy'], params['mIzz'], params['mIxy'], params['mIxz'], params['mIyz'],
             params['mrhox'], params['mrhoy'], params['mrhoz'], params['addGravityLoadForExtraMass'])
@@ -346,9 +342,8 @@ class TowerFrame3DD(Component):
 
         load = frame3dd.StaticLoadCase(gx, gy, gz)
 
-
         # point loads
-        nF = params['plidx'] + np.ones(len(params['plidx']))
+        nF = params['plidx'] + np.ones(len(params['plidx']), dtype=int)
         load.changePointLoads(nF, params['Fx'], params['Fy'], params['Fz'], params['Mxx'], params['Myy'], params['Mzz'])
 
 
@@ -420,10 +415,10 @@ class TowerFrame3DD(Component):
 #        shear_stress = 2. * V / self.Az  # coefficient of 2 for a hollow circular section, but should be conservative for other shapes
         axial_stress = Fz/params['Az'] - np.sqrt(Mxx**2+Myy**2)/params['Iyy']*params['d']/2.0  #More conservative, just use the tilted bending and add total max shear as well at the same point, if you do not like it go back to the previous lines
         shear_stress = 2. * np.sqrt(Vx**2+Vy**2) / params['Az'] # coefficient of 2 for a hollow circular section, but should be conservative for other shapes
-
+        print 'shear_stress: ', shear_stress
         # hoop_stress (Eurocode method)
         hoop_stress = hoopStressEurocode(params['z'], params['d'], params['t'], params['L_reinforced'], params['qdyn'])
-
+        print 'hoop_stress: ', hoop_stress
         # von mises stress
         unknowns['stress'] = vonMisesStressUtilization(axial_stress, hoop_stress, shear_stress,
                       params['gamma_f']*params['gamma_m']*params['gamma_n'], params['sigma_y'])
@@ -727,7 +722,7 @@ if __name__ == '__main__':
     sigma_y = 450.0e6*np.ones(n)
 
     # --- spring reaction data.  Use float('inf') for rigid constraints. ---
-    kidx = np.array([0])  # applied at base
+    kidx = np.array([0], dtype=int)  # applied at base
     kx = np.array([float('inf')])
     ky = np.array([float('inf')])
     kz = np.array([float('inf')])
@@ -737,7 +732,7 @@ if __name__ == '__main__':
     nK = len(kidx)
 
     # --- extra mass ----
-    midx = np.array([n-1])  # RNA mass at top
+    midx = np.array([n-1], dtype=int)  # RNA mass at top
     m = np.array([285598.8])
     mIxx = np.array([1.14930678e+08])
     mIyy = np.array([2.20354030e+07])
@@ -761,7 +756,7 @@ if __name__ == '__main__':
     # if addGravityLoadForExtraMass=True be sure not to double count by adding those force here also
     # # --- loading case 1: max Thrust ---
     wind_Uref1 = 11.73732
-    plidx1 = np.array([n-1])  # at  top
+    plidx1 = np.array([n-1], dtype=int)  # at  top
     Fx1 = np.array([1284744.19620519])
     Fy1 = np.array([0.])
     Fz1 = np.array([-2914124.84400512])
@@ -773,7 +768,7 @@ if __name__ == '__main__':
 
     # # --- loading case 2: max wind speed ---
     wind_Uref2 = 70.0
-    plidx2 = np.array([n-1])  # at  top
+    plidx2 = np.array([n-1], dtype=int)  # at  top
     Fx2 = np.array([930198.60063279])
     Fy2 = np.array([0.])
     Fz2 = np.array([-2883106.12368949])
@@ -942,6 +937,10 @@ if __name__ == '__main__':
     print 'Shell buckling =', prob['tower1.shell_buckling']
     print 'Shell buckling =', prob['tower2.shell_buckling']
     print 'damage =', prob['tower1.damage']
+
+
+    print 'wind1: ', prob['wind1.Uref']
+    print 'wind2: ', prob['wind2.Uref']
 
 
     import matplotlib.pyplot as plt
