@@ -401,10 +401,18 @@ class TowerFrame3DD(Component):
         Fz = np.concatenate([[-Fz[0]], Fz[1::2]])
         Vx = np.concatenate([[-Vx[0]], Vx[1::2]])
         Vy = np.concatenate([[-Vy[0]], Vy[1::2]])
+        print 'Fz: ', Fz
+        print 'Vx: ', Vx
+        print 'Vy: ', Vy
 
         Mzz = np.concatenate([[-Mzz[0]], Mzz[1::2]])
         Myy = np.concatenate([[-Myy[0]], Myy[1::2]])
         Mxx = np.concatenate([[-Mxx[0]], Mxx[1::2]])
+        print 'Mzz: ', Mzz
+        print 'Myy: ', Myy
+        print 'Mxx: ', Mxx
+
+        print 'Az: ', params['Az']
 
         # axial and shear stress
         ##R = self.d/2.0
@@ -414,6 +422,7 @@ class TowerFrame3DD(Component):
 #        V = Vy*x_stress/R - Vx*y_stress/R  # shear stress orthogonal to direction x,y
 #        shear_stress = 2. * V / self.Az  # coefficient of 2 for a hollow circular section, but should be conservative for other shapes
         axial_stress = Fz/params['Az'] - np.sqrt(Mxx**2+Myy**2)/params['Iyy']*params['d']/2.0  #More conservative, just use the tilted bending and add total max shear as well at the same point, if you do not like it go back to the previous lines
+        print 'axial_stress: ', axial_stress
         shear_stress = 2. * np.sqrt(Vx**2+Vy**2) / params['Az'] # coefficient of 2 for a hollow circular section, but should be conservative for other shapes
         print 'shear_stress: ', shear_stress
         # hoop_stress (Eurocode method)
