@@ -75,16 +75,16 @@ class TowerDiscretization(Component):
 class GeometricConstraints(Component):
     """docstring for OtherConstraints"""
 
-    def __init__(self, nFull):
+    def __init__(self, nPoints):
 
         super(GeometricConstraints, self).__init__()
-        self.add_param('d', np.zeros(nFull), units='m')
-        self.add_param('t', np.zeros(nFull), units='m')
+        self.add_param('d', np.zeros(nPoints), units='m')
+        self.add_param('t', np.zeros(nPoints), units='m')
         self.add_param('min_d_to_t', 120.0)
         self.add_param('min_taper', 0.4)
 
-        self.add_output('weldability', np.zeros(nFull))
-        self.add_output('manufacturability', np.zeros(nFull))
+        self.add_output('weldability', np.zeros(nPoints))
+        self.add_output('manufacturability', np.zeros(nPoints))
 
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -93,6 +93,7 @@ class GeometricConstraints(Component):
         t = params['t']
         min_d_to_t = params['min_d_to_t']
         min_taper = params['min_taper']
+
 
         unknowns['weldability'] = (min_d_to_t-d/t)/min_d_to_t
         manufacturability = min_taper-d[1:]/d[:-1] #taper ration
@@ -354,15 +355,15 @@ class TowerFrame3DD(Component):
         # trapezoidally distributed loads
         EL = np.arange(1, n)
         xx1 = np.zeros(n-1)
-        xx2 = z[1:] - z[:-1] - 1e-6  # subtract small number b.c. of precision
+        xx2 = z[1:] - z[:-1] - np.ones(n-1)*1e-6  # subtract small number b.c. of precision
         wx1 = Px[:-1]
         wx2 = Px[1:]
         xy1 = np.zeros(n-1)
-        xy2 = z[1:] - z[:-1] - 1e-6
+        xy2 = z[1:] - z[:-1] - np.ones(n-1)*1e-6
         wy1 = Py[:-1]
         wy2 = Py[1:]
         xz1 = np.zeros(n-1)
-        xz2 = z[1:] - z[:-1] - 1e-6
+        xz2 = z[1:] - z[:-1] - np.ones(n-1)*1e-6
         wz1 = Pz[:-1]
         wz2 = Pz[1:]
 
@@ -479,7 +480,7 @@ class TowerSE(Group):
         self.add('props', CylindricalShellProperties(nFull))
         self.add('tower1', TowerFrame3DD(nFull, nK, nM, nPL, nDEL))
         self.add('tower2', TowerFrame3DD(nFull, nK, nM, nPL, nDEL))
-        self.add('gc', GeometricConstraints(nFull))
+        self.add('gc', GeometricConstraints(nPoints))
 
         # connections to wind1
         self.connect('z_full', 'wind1.z')
@@ -629,7 +630,7 @@ class TowerSE(Group):
         self.connect('distLoads2.Py', 'tower2.Py')
         self.connect('distLoads2.Pz', 'tower2.Pz')
         self.connect('distLoads2.qdyn', 'tower2.qdyn')
-        #elf.connect('distLoads2.outloads', 'tower2.WWloads')
+        #self.connect('distLoads2.outloads', 'tower2.WWloads')
 
         # connect tower1 and tower2
         self.connect('tower1.E', 'tower2.E')
@@ -637,7 +638,6 @@ class TowerSE(Group):
         self.connect('tower1.rho', 'tower2.rho')
         self.connect('tower1.sigma_y', 'tower2.sigma_y')
         self.connect('tower1.L_reinforced', 'tower2.L_reinforced')
-        # self.connect('tower1.theta_stress', 'tower2.theta_stress')
         self.connect('tower1.kidx', 'tower2.kidx')
         self.connect('tower1.kx', 'tower2.kx')
         self.connect('tower1.ky', 'tower2.ky')
@@ -679,8 +679,8 @@ class TowerSE(Group):
         self.connect('tower1.shift', 'tower2.shift')
 
         # connections to gc
-        self.connect('d_full', 'gc.d')
-        self.connect('t_full', 'gc.t')
+        self.connect('d_param', 'gc.d')
+        self.connect('t_param', 'gc.t')
 
 
         # outputs TODO
@@ -707,8 +707,8 @@ if __name__ == '__main__':
     from commonse.environment import LogWind
 
     # --- geometry ----
-    z_param = [0.0, 43.8, 87.6]
-    d_param = [6.0, 4.935, 3.87]
+    z_param = np.array([0.0, 43.8, 87.6])
+    d_param = np.array([6.0, 4.935, 3.87])
     t_param = [0.027*1.3, 0.023*1.3, 0.019*1.3]
     n = 15
     z_full = np.linspace(0.0, 87.6, n)
@@ -926,7 +926,7 @@ if __name__ == '__main__':
     print 'f2 (Hz) =', prob['tower2.f2']
     print 'top_deflection1 (m) =', prob['tower1.top_deflection']
     print 'top_deflection2 (m) =', prob['tower2.top_deflection']
-    #print 'weldability =', prob['gc.weldability']
+    print 'weldability =', prob['gc.weldability']
     print 'manufacturability =', prob['gc.manufacturability']
     print 'stress1 =', prob['tower1.stress']
     print 'stress2 =', prob['tower2.stress']
