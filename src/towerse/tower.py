@@ -350,6 +350,10 @@ class TowerFrame3DD(Component):
 
         # distributed loads
         Px, Py, Pz = params['Pz'], params['Py'], -params['Px']  # switch to local c.s.
+        print '*****************************************************'
+        print 'Px: ', Px
+        print 'Py: ', Py
+        print 'Pz: ', Pz
         z = params['z']
 
         # trapezoidally distributed loads
