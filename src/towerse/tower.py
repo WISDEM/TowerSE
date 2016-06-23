@@ -380,6 +380,13 @@ class TowerFrame3DD(Component):
 
         # run the analysis
         displacements, forces, reactions, internalForces, mass, modal = tower.run()
+        print '*****************************************************'
+        print 'displacements: ', displacements
+        print 'forces: ', forces
+        print 'reactions: ', reactions
+        print 'internalForces: ', internalForces
+        print 'mass: ', mass
+        print 'modal: ', modal
         iCase = 0
 
         # mass
