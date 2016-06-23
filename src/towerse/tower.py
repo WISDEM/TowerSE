@@ -162,7 +162,7 @@ class CylindricalShellProperties(Component):
 #@implement_base(TowerFromCSProps)
 class TowerFrame3DD(Component):
 
-    def __init__(self, nFull, nK, nM, nPL, nDEL):
+    def __init__(self, nFull, nK, nMass, nPL, nDEL):
 
         super(TowerFrame3DD, self).__init__()
         # cross-sectional data along tower.
@@ -195,17 +195,17 @@ class TowerFrame3DD(Component):
         self.add_param('ktz', np.zeros(nK), units='m', desc='spring stiffness in theta_z-rotation')
 
         # extra mass
-        self.add_param('midx', np.zeros(nM), desc='indices where added mass should be applied.')
-        self.add_param('m', np.zeros(nM), units='kg', desc='added mass')
-        self.add_param('mIxx', np.zeros(nM), units='kg*m**2', desc='x mass moment of inertia about some point p')
-        self.add_param('mIyy', np.zeros(nM), units='kg*m**2', desc='y mass moment of inertia about some point p')
-        self.add_param('mIzz', np.zeros(nM), units='kg*m**2', desc='z mass moment of inertia about some point p')
-        self.add_param('mIxy', np.zeros(nM), units='kg*m**2', desc='xy mass moment of inertia about some point p')
-        self.add_param('mIxz', np.zeros(nM), units='kg*m**2', desc='xz mass moment of inertia about some point p')
-        self.add_param('mIyz', np.zeros(nM), units='kg*m**2', desc='yz mass moment of inertia about some point p')
-        self.add_param('mrhox', np.zeros(nM), units='m', desc='x-location of p relative to node')
-        self.add_param('mrhoy', np.zeros(nM), units='m', desc='y-location of p relative to node')
-        self.add_param('mrhoz', np.zeros(nM), units='m', desc='z-location of p relative to node')
+        self.add_param('midx', np.zeros(nMass), desc='indices where added mass should be applied.')
+        self.add_param('m', np.zeros(nMass), units='kg', desc='added mass')
+        self.add_param('mIxx', np.zeros(nMass), units='kg*m**2', desc='x mass moment of inertia about some point p')
+        self.add_param('mIyy', np.zeros(nMass), units='kg*m**2', desc='y mass moment of inertia about some point p')
+        self.add_param('mIzz', np.zeros(nMass), units='kg*m**2', desc='z mass moment of inertia about some point p')
+        self.add_param('mIxy', np.zeros(nMass), units='kg*m**2', desc='xy mass moment of inertia about some point p')
+        self.add_param('mIxz', np.zeros(nMass), units='kg*m**2', desc='xz mass moment of inertia about some point p')
+        self.add_param('mIyz', np.zeros(nMass), units='kg*m**2', desc='yz mass moment of inertia about some point p')
+        self.add_param('mrhox', np.zeros(nMass), units='m', desc='x-location of p relative to node')
+        self.add_param('mrhoy', np.zeros(nMass), units='m', desc='y-location of p relative to node')
+        self.add_param('mrhoz', np.zeros(nMass), units='m', desc='z-location of p relative to node')
         self.add_param('addGravityLoadForExtraMass', True, desc='add gravitational load')
 
 
@@ -460,7 +460,7 @@ class TowerFrame3DD(Component):
 
 class TowerSE(Group):
 
-    def __init__(self, nPoints, nFull, nK, nM, nPL, nDEL, wind=''):
+    def __init__(self, nPoints, nFull, nK, nMass, nPL, nDEL, wind=''):
 
         super(TowerSE, self).__init__()
 
@@ -486,8 +486,8 @@ class TowerSE(Group):
         self.add('distLoads1', AeroHydroLoads(nFull))
         self.add('distLoads2', AeroHydroLoads(nFull))
         self.add('props', CylindricalShellProperties(nFull))
-        self.add('tower1', TowerFrame3DD(nFull, nK, nM, nPL, nDEL))
-        self.add('tower2', TowerFrame3DD(nFull, nK, nM, nPL, nDEL))
+        self.add('tower1', TowerFrame3DD(nFull, nK, nMass, nPL, nDEL))
+        self.add('tower2', TowerFrame3DD(nFull, nK, nMass, nPL, nDEL))
         self.add('gc', GeometricConstraints(nPoints))
 
         # connections to wind1
@@ -752,7 +752,7 @@ if __name__ == '__main__':
     mrhox = np.array([-1.13197635])
     mrhoy = np.array([0.])
     mrhoz = np.array([0.50875268])
-    nM = len(midx)
+    nMass = len(midx)
     addGravityLoadForExtraMass = True
     # -----------
 
@@ -816,7 +816,7 @@ if __name__ == '__main__':
     nFull = len(z_full)
     wind = 'PowerWind'
 
-    prob = Problem(root=TowerSE(nPoints, nFull, nK, nM, nPL, nDEL, wind=wind))
+    prob = Problem(root=TowerSE(nPoints, nFull, nK, nMass, nPL, nDEL, wind=wind))
     """
     prob.driver.add_objective('tower1.mass', scaler=1E-6)
     prob.driver.add_desvar('z_param', lower=np.zeros(nPoints), upper=np.ones(nPoints)*1000., scaler=1E-2)
