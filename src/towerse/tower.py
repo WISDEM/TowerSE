@@ -371,6 +371,20 @@ class TowerFrame3DD(Component):
         wz1 = Pz[:-1]
         wz2 = Pz[1:]
 
+        print 'EL: ', EL
+        print 'xx1: ', xx1
+        print 'xx2: ', xx2
+        print 'wx1: ', wx1
+        print 'wx2: ', wx2
+        print 'xy1: ', xy1
+        print 'xy2: ', xy2
+        print 'wy1: ', wy1
+        print 'wy2: ', wy2
+        print 'xz1: ', xz1
+        print 'xz2: ', xz2
+        print 'wz1: ', wz1
+        print 'wz2: ', wz2
+
         load.changeTrapezoidalLoads(EL, xx1, xx2, wx1, wx2, xy1, xy2, wy1, wy2, xz1, xz2, wz1, wz2)
 
         tower.addLoadCase(load)
@@ -745,16 +759,16 @@ if __name__ == '__main__':
 
     # --- extra mass ----
     midx = np.array([n-1])  # RNA mass at top
-    m = [285598.8]
-    mIxx = [1.14930678e+08]
-    mIyy = [2.20354030e+07]
-    mIzz = [1.87597425e+07]
-    mIxy = [0.00000000e+00]
-    mIxz = [5.03710467e+05]
-    mIyz = [0.00000000e+00]
-    mrhox = [-1.13197635]
-    mrhoy = [0.]
-    mrhoz = [0.50875268]
+    m = np.array([285598.8])
+    mIxx = np.array([1.14930678e+08])
+    mIyy = np.array([2.20354030e+07])
+    mIzz = np.array([1.87597425e+07])
+    mIxy = np.array([0.00000000e+00])
+    mIxz = np.array([5.03710467e+05])
+    mIyz = np.array([0.00000000e+00])
+    mrhox = np.array([-1.13197635])
+    mrhoy = np.array([0.])
+    mrhoz = np.array([0.50875268])
     nM = len(midx)
     addGravityLoadForExtraMass = True
     # -----------
@@ -768,25 +782,25 @@ if __name__ == '__main__':
     # if addGravityLoadForExtraMass=True be sure not to double count by adding those force here also
     # # --- loading case 1: max Thrust ---
     wind_Uref1 = 11.73732
-    plidx1 = [n-1]  # at  top
-    Fx1 = [1284744.19620519]
-    Fy1 = [0.]
-    Fz1 = [-2914124.84400512]
-    Mxx1 = [3963732.76208099]
-    Myy1 = [-2275104.79420872]
-    Mzz1 = [-346781.68192839]
+    plidx1 = np.array([n-1])  # at  top
+    Fx1 = np.array([1284744.19620519])
+    Fy1 = np.array([0.])
+    Fz1 = np.array([-2914124.84400512])
+    Mxx1 = np.array([3963732.76208099])
+    Myy1 = np.array([-2275104.79420872])
+    Mzz1 = np.array([-346781.68192839])
     nPL = len(plidx1)
     # # ---------------
 
     # # --- loading case 2: max wind speed ---
     wind_Uref2 = 70.0
-    plidx2 = [n-1]  # at  top
-    Fx2 = [930198.60063279]
-    Fy2 = [0.]
-    Fz2 = [-2883106.12368949]
-    Mxx2 = [-1683669.22411597]
-    Myy2 = [-2522475.34625363]
-    Mzz2 = [147301.97023764]
+    plidx2 = np.array([n-1])  # at  top
+    Fx2 = np.array([930198.60063279])
+    Fy2 = np.array([0.])
+    Fz2 = np.array([-2883106.12368949])
+    Mxx2 = np.array([-1683669.22411597])
+    Myy2 = np.array([-2522475.34625363])
+    Mzz2 = np.array([147301.97023764])
     # # ---------------
 
     # --- safety factors ---
