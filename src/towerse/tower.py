@@ -318,8 +318,6 @@ class TowerFrame3DD(Component):
         # initialize frame3dd object
         tower = frame3dd.Frame(nodes, reactions, elements, options)
 
-        print 'tower: ', tower.__dict__
-
 
         # ------ add extra mass ------------
 
@@ -373,7 +371,16 @@ class TowerFrame3DD(Component):
         tower.addLoadCase(load)
 
         # -----------------------------------
-
+        print '*******************************************************************'
+        #print 'tower: ', tower.__dict__
+        print "c_nodes: ", tower.__dict__['c_nodes'].__dict__
+        print "c_reactions: ", tower.__dict__['c_reactions'].__dict__
+        print "c_condensation: ", tower.__dict__['c_condensation'].__dict__
+        print "c_elements: ", tower.__dict__['c_elements'].__dict__
+        #print "loadCases: ", tower.__dict__['StaticLoadCase'].__dict__
+        print "c_extraInertia: ", tower.__dict__['c_extraInertia'].__dict__
+        print "c_other: ", tower.__dict__['c_other'].__dict__
+        print "c_extraMass: ", tower.__dict__['c_extraMass'].__dict__
 
         # run the analysis
         displacements, forces, reactions, internalForces, mass, modal = tower.run()
