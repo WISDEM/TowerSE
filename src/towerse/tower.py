@@ -180,10 +180,9 @@ class TowerFrame3DD(Component):
         self.add_param('sigma_y', np.zeros(nFull), units='N/m**2', desc='yield stress')
 
         # effective geometry -- used for handbook methods to estimate hoop stress, buckling, fatigue
-        # length should be one less than z
         self.add_param('d', np.zeros(nFull), units='m', desc='effective tower diameter for section')
         self.add_param('t', np.zeros(nFull), units='m', desc='effective shell thickness for section')
-        self.add_param('L_reinforced', np.zeros(nFull), units='m') #TODO should these three be of length (nFull-1)?
+        self.add_param('L_reinforced', np.zeros(nFull), units='m')
 
         # spring reaction data.  Use float('inf') for rigid constraints.
         self.add_param('kidx', np.zeros(nK), desc='indices of z where external stiffness reactions should be applied.')
@@ -282,7 +281,7 @@ class TowerFrame3DD(Component):
         # ------ reaction data ------------
 
         # rigid base
-        node = params['kidx'] + np.ones(len(params['kidx']), dtype=int)  # add one because 0-based index but 1-based node numbering
+        node = params['kidx'] + 1  # add one because 0-based index but 1-based node numbering
         rigid = float('inf')
 
         reactions = frame3dd.ReactionData(node, params['kx'], params['ky'], params['kz'], params['ktx'], params['kty'], params['ktz'], rigid)
@@ -322,7 +321,7 @@ class TowerFrame3DD(Component):
         # ------ add extra mass ------------
 
         # extra node inertia data
-        N = params['midx'] + np.ones(len(params['midx']), dtype=int)
+        N = params['midx'] + 1
 
         tower.changeExtraNodeMass(N, params['m'], params['mIxx'], params['mIyy'], params['mIzz'], params['mIxy'], params['mIxz'], params['mIyz'],
             params['mrhox'], params['mrhoy'], params['mrhoz'], params['addGravityLoadForExtraMass'])
@@ -343,12 +342,21 @@ class TowerFrame3DD(Component):
         load = frame3dd.StaticLoadCase(gx, gy, gz)
 
         # point loads
-        nF = params['plidx'] + np.ones(len(params['plidx']), dtype=int)
+        nF = params['plidx'] + 1
         load.changePointLoads(nF, params['Fx'], params['Fy'], params['Fz'], params['Mxx'], params['Myy'], params['Mzz'])
+        print 'Fx: ', params['Fx']
+        print 'Fy: ', params['Fy']
+        print 'Fz: ', params['Fz']
+        print 'Mxx: ', params['Mxx']
+        print 'Myy: ', params['Myy']
+        print 'Mzz: ', params['Mzz']
 
 
         # distributed loads
         Px, Py, Pz = params['Pz'], params['Py'], -params['Px']  # switch to local c.s.
+        print 'Px: ', Px
+        print 'Py: ', Py
+        print 'Pz: ', Pz
         z = params['z']
 
         # trapezoidally distributed loads
@@ -371,6 +379,7 @@ class TowerFrame3DD(Component):
         tower.addLoadCase(load)
 
         # -----------------------------------
+        """
         print '*******************************************************************'
         #print 'tower: ', tower.__dict__
         print "c_nodes: ", tower.__dict__['c_nodes'].__dict__
@@ -381,6 +390,7 @@ class TowerFrame3DD(Component):
         print "c_extraInertia: ", tower.__dict__['c_extraInertia'].__dict__
         print "c_other: ", tower.__dict__['c_other'].__dict__
         print "c_extraMass: ", tower.__dict__['c_extraMass'].__dict__
+        """
 
         # run the analysis
         displacements, forces, reactions, internalForces, mass, modal = tower.run()
