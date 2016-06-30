@@ -55,6 +55,8 @@ class TowerDiscretization(Component):
 
         super(TowerDiscretization, self).__init__()
 
+        self.fd_options['force_fd'] = True
+
          # variables
         self.add_param('z_param', np.zeros(nPoints), units='m', desc='parameterized locations along tower, linear lofting between')
         self.add_param('d_param', np.zeros(nPoints), units='m', desc='tower diameter at corresponding locations')
@@ -78,6 +80,10 @@ class GeometricConstraints(Component):
     def __init__(self, nPoints):
 
         super(GeometricConstraints, self).__init__()
+
+        self.fd_options['force_fd'] = True
+
+
         self.add_param('d', np.zeros(nPoints), units='m')
         self.add_param('t', np.zeros(nPoints), units='m')
         self.add_param('min_d_to_t', 120.0)
@@ -126,6 +132,8 @@ class CylindricalShellProperties(Component):
 
         super(CylindricalShellProperties, self).__init__()
 
+        self.fd_options['force_fd'] = True
+
         self.add_param('d', np.zeros(nFull), units='m', desc='tower diameter at corresponding locations')
         self.add_param('t', np.zeros(nFull), units='m', desc='shell thickness at corresponding locations')
 
@@ -165,6 +173,9 @@ class TowerFrame3DD(Component):
     def __init__(self, nFull, nK, nMass, nPL, nDEL):
 
         super(TowerFrame3DD, self).__init__()
+
+        self.fd_options['force_fd'] = True
+
         # cross-sectional data along tower.
         self.add_param('z', np.zeros(nFull), units='m', desc='location along tower. start at bottom and go to top')
         self.add_param('Az', np.zeros(nFull), units='m**2', desc='cross-sectional area')
@@ -281,7 +292,7 @@ class TowerFrame3DD(Component):
         # ------ reaction data ------------
 
         # rigid base
-        node = params['kidx'] + 1  # add one because 0-based index but 1-based node numbering
+        node = params['kidx'] + np.ones(len(params['kidx']), dtype=int)  # add one because 0-based index but 1-based node numbering
         rigid = float('inf')
 
         reactions = frame3dd.ReactionData(node, params['kx'], params['ky'], params['kz'], params['ktx'], params['kty'], params['ktz'], rigid)
@@ -321,7 +332,7 @@ class TowerFrame3DD(Component):
         # ------ add extra mass ------------
 
         # extra node inertia data
-        N = params['midx'] + 1
+        N = params['midx'] + np.ones(len(params['midx']), dtype=int)
 
         tower.changeExtraNodeMass(N, params['m'], params['mIxx'], params['mIyy'], params['mIzz'], params['mIxy'], params['mIxz'], params['mIyz'],
             params['mrhox'], params['mrhoy'], params['mrhoz'], params['addGravityLoadForExtraMass'])
@@ -342,21 +353,11 @@ class TowerFrame3DD(Component):
         load = frame3dd.StaticLoadCase(gx, gy, gz)
 
         # point loads
-        nF = params['plidx'] + 1
+        nF = params['plidx'] + np.ones(len(params['plidx']), dtype=int)
         load.changePointLoads(nF, params['Fx'], params['Fy'], params['Fz'], params['Mxx'], params['Myy'], params['Mzz'])
-        print 'Fx: ', params['Fx']
-        print 'Fy: ', params['Fy']
-        print 'Fz: ', params['Fz']
-        print 'Mxx: ', params['Mxx']
-        print 'Myy: ', params['Myy']
-        print 'Mzz: ', params['Mzz']
-
 
         # distributed loads
         Px, Py, Pz = params['Pz'], params['Py'], -params['Px']  # switch to local c.s.
-        print 'Px: ', Px
-        print 'Py: ', Py
-        print 'Pz: ', Pz
         z = params['z']
 
         # trapezoidally distributed loads
@@ -467,36 +468,56 @@ class TowerSE(Group):
         self.add('geometry', TowerDiscretization(nPoints, nFull), promotes=['*'])
         # two load cases.  TODO: use a case iterator
         if wind == 'PowerWind':
-            self.add('wind1', PowerWind(nFull))
-            self.add('wind2', PowerWind(nFull))
+            self.add('wind1', PowerWind(nFull), promotes=['zref','z0'])
+            self.add('wind2', PowerWind(nFull), promotes=['zref','z0'])
         elif wind == 'LogWind':
-            self.add('wind1', LogWind(nFull))
-            self.add('wind2', LogWind(nFull))
-        else:
-            self.add('wind1', WindBase(nFull))
-            self.add('wind2', WindBase(nFull))
+            self.add('wind1', LogWind(nFull), promotes=['zref','z0'])
+            self.add('wind2', LogWind(nFull), promotes=['zref','z0'])
         self.add('wave1', WaveBase(nFull))
         self.add('wave2', WaveBase(nFull))
         self.add('windLoads1', TowerWindDrag(nFull))
         self.add('windLoads2', TowerWindDrag(nFull))
         self.add('waveLoads1', TowerWaveDrag(nFull))
         self.add('waveLoads2', TowerWaveDrag(nFull))
-        self.add('distLoads1', AeroHydroLoads(nFull))
-        self.add('distLoads2', AeroHydroLoads(nFull))
-        self.add('props', CylindricalShellProperties(nFull))
-        self.add('tower1', TowerFrame3DD(nFull, nK, nMass, nPL, nDEL))
-        self.add('tower2', TowerFrame3DD(nFull, nK, nMass, nPL, nDEL))
+        self.add('distLoads1', AeroHydroLoads(nFull), promotes=['yaw'])
+        self.add('distLoads2', AeroHydroLoads(nFull), promotes=['yaw'])
+        self.add('props', CylindricalShellProperties(nFull), promotes=['Az','Asx','Asy','Jz','Ixx','Iyy'])
+        self.add('tower1', TowerFrame3DD(nFull, nK, nMass, nPL, nDEL), promotes=['E','G',
+                            'sigma_y','L_reinforced','kidx','kx','ky','kz','ktx','kty',
+                            'ktz','midx','m','mIxx','mIyy','mIzz','mIxy','mIxz','mIyz',
+                            'mrhox','mrhoy','mrhoz','addGravityLoadForExtraMass','g',
+                            'gamma_f','gamma_m','gamma_n','gamma_b','life','m_SN','DC',
+                            'z_DEL','M_DEL','gamma_fatigue','shear','geom','dx','nM',
+                            'Mmethod','lump','tol','shift','Az','Asx','Asy','Jz','Ixx','Iyy'])
+        self.add('tower2', TowerFrame3DD(nFull, nK, nMass, nPL, nDEL), promotes=['E','G',
+                            'sigma_y','L_reinforced','kidx','kx','ky','kz','ktx','kty',
+                            'ktz','midx','m','mIxx','mIyy','mIzz','mIxy','mIxz','mIyz',
+                            'mrhox','mrhoy','mrhoz','addGravityLoadForExtraMass','g',
+                            'gamma_f','gamma_m','gamma_n','gamma_b','life','m_SN','DC',
+                            'z_DEL','M_DEL','gamma_fatigue','shear','geom','dx','nM',
+                            'Mmethod','lump','tol','shift','Az','Asx','Asy','Jz','Ixx','Iyy'])
         self.add('gc', GeometricConstraints(nPoints))
+
+
+        self.connect('distLoads2.Px', 'tower2.Px')
+        self.connect('distLoads2.Py', 'tower2.Py')
+        self.connect('distLoads2.Pz', 'tower2.Pz')
+        self.connect('distLoads2.qdyn', 'tower2.qdyn')
+        #self.connect('distLoads2.outloads', 'tower2.WWloads')
+
+        # connect tower1 and tower2
+        self.connect('tower1.rho', 'tower2.rho')
+
+        # connections to gc
+        self.connect('d_param', 'gc.d')
+        self.connect('t_param', 'gc.t')
+
 
         # connections to wind1
         self.connect('z_full', 'wind1.z')
 
         # connections to wind2
         self.connect('z_full', 'wind2.z')
-
-        # connect wind1 to wind2
-        self.connect('wind1.zref', 'wind2.zref')
-        self.connect('wind1.z0', 'wind2.z0')
 
         # connections to wave1 and wave2
         self.connect('z_full', 'wave1.z')
@@ -540,63 +561,10 @@ class TowerSE(Group):
         self.connect('waveLoads1.cd_usr', 'waveLoads2.cd_usr')
 
         # connections to distLoads1
-        self.connect('windLoads1.windLoads:Px', 'distLoads1.windLoads:Px')
-        self.connect('windLoads1.windLoads:Py', 'distLoads1.windLoads:Py')
-        self.connect('windLoads1.windLoads:Pz', 'distLoads1.windLoads:Pz')
-        self.connect('windLoads1.windLoads:qdyn', 'distLoads1.windLoads:qdyn')
-        self.connect('windLoads1.windLoads:z', 'distLoads1.windLoads:z')
-        self.connect('windLoads1.windLoads:d', 'distLoads1.windLoads:d')
-        self.connect('windLoads1.windLoads:beta', 'distLoads1.windLoads:beta')
-        self.connect('windLoads1.windLoads:Px0', 'distLoads1.windLoads:Px0')
-        self.connect('windLoads1.windLoads:Py0', 'distLoads1.windLoads:Py0')
-        self.connect('windLoads1.windLoads:Pz0', 'distLoads1.windLoads:Pz0')
-        self.connect('windLoads1.windLoads:qdyn0', 'distLoads1.windLoads:qdyn0')
-        self.connect('windLoads1.windLoads:beta0', 'distLoads1.windLoads:beta0')
-
-        self.connect('waveLoads1.waveLoads:Px', 'distLoads1.waveLoads:Px')
-        self.connect('waveLoads1.waveLoads:Py', 'distLoads1.waveLoads:Py')
-        self.connect('waveLoads1.waveLoads:Pz', 'distLoads1.waveLoads:Pz')
-        self.connect('waveLoads1.waveLoads:qdyn', 'distLoads1.waveLoads:qdyn')
-        self.connect('waveLoads1.waveLoads:z', 'distLoads1.waveLoads:z')
-        self.connect('waveLoads1.waveLoads:d', 'distLoads1.waveLoads:d')
-        self.connect('waveLoads1.waveLoads:beta', 'distLoads1.waveLoads:beta')
-        self.connect('waveLoads1.waveLoads:Px0', 'distLoads1.waveLoads:Px0')
-        self.connect('waveLoads1.waveLoads:Py0', 'distLoads1.waveLoads:Py0')
-        self.connect('waveLoads1.waveLoads:Pz0', 'distLoads1.waveLoads:Pz0')
-        self.connect('waveLoads1.waveLoads:qdyn0', 'distLoads1.waveLoads:qdyn0')
-        self.connect('waveLoads1.waveLoads:beta0', 'distLoads1.waveLoads:beta0')
         self.connect('z_full', 'distLoads1.z')
 
         # connections to distLoads2
-        self.connect('windLoads2.windLoads:Px', 'distLoads2.windLoads:Px')
-        self.connect('windLoads2.windLoads:Py', 'distLoads2.windLoads:Py')
-        self.connect('windLoads2.windLoads:Pz', 'distLoads2.windLoads:Pz')
-        self.connect('windLoads2.windLoads:qdyn', 'distLoads2.windLoads:qdyn')
-        self.connect('windLoads2.windLoads:z', 'distLoads2.windLoads:z')
-        self.connect('windLoads2.windLoads:d', 'distLoads2.windLoads:d')
-        self.connect('windLoads2.windLoads:beta', 'distLoads2.windLoads:beta')
-        self.connect('windLoads2.windLoads:Px0', 'distLoads2.windLoads:Px0')
-        self.connect('windLoads2.windLoads:Py0', 'distLoads2.windLoads:Py0')
-        self.connect('windLoads2.windLoads:Pz0', 'distLoads2.windLoads:Pz0')
-        self.connect('windLoads2.windLoads:qdyn0', 'distLoads2.windLoads:qdyn0')
-        self.connect('windLoads2.windLoads:beta0', 'distLoads2.windLoads:beta0')
-
-        self.connect('waveLoads2.waveLoads:Px', 'distLoads2.waveLoads:Px')
-        self.connect('waveLoads2.waveLoads:Py', 'distLoads2.waveLoads:Py')
-        self.connect('waveLoads2.waveLoads:Pz', 'distLoads2.waveLoads:Pz')
-        self.connect('waveLoads2.waveLoads:qdyn', 'distLoads2.waveLoads:qdyn')
-        self.connect('waveLoads2.waveLoads:z', 'distLoads2.waveLoads:z')
-        self.connect('waveLoads2.waveLoads:d', 'distLoads2.waveLoads:d')
-        self.connect('waveLoads2.waveLoads:beta', 'distLoads2.waveLoads:beta')
-        self.connect('waveLoads2.waveLoads:Px0', 'distLoads2.waveLoads:Px0')
-        self.connect('waveLoads2.waveLoads:Py0', 'distLoads2.waveLoads:Py0')
-        self.connect('waveLoads2.waveLoads:Pz0', 'distLoads2.waveLoads:Pz0')
-        self.connect('waveLoads2.waveLoads:qdyn0', 'distLoads2.waveLoads:qdyn0')
-        self.connect('waveLoads2.waveLoads:beta0', 'distLoads2.waveLoads:beta0')
         self.connect('z_full', 'distLoads2.z')
-
-        # connect yaw
-        self.connect('distLoads1.yaw', 'distLoads2.yaw')
 
         # connections to props
         self.connect('d_full', 'props.d')
@@ -604,12 +572,7 @@ class TowerSE(Group):
 
         # connect to tower1
         self.connect('z_full', 'tower1.z')
-        self.connect('props.Az', 'tower1.Az')
-        self.connect('props.Asx', 'tower1.Asx')
-        self.connect('props.Asy', 'tower1.Asy')
-        self.connect('props.Jz', 'tower1.Jz')
-        self.connect('props.Ixx', 'tower1.Ixx')
-        self.connect('props.Iyy', 'tower1.Iyy')
+
 
         self.connect('d_full', 'tower1.d')
         self.connect('t_full', 'tower1.t')
@@ -622,71 +585,64 @@ class TowerSE(Group):
 
         # connect to tower2
         self.connect('z_full', 'tower2.z')
-        self.connect('props.Az', 'tower2.Az')
-        self.connect('props.Asx', 'tower2.Asx')
-        self.connect('props.Asy', 'tower2.Asy')
-        self.connect('props.Jz', 'tower2.Jz')
-        self.connect('props.Ixx', 'tower2.Ixx')
-        self.connect('props.Iyy', 'tower2.Iyy')
 
         self.connect('d_full', 'tower2.d')
         self.connect('t_full', 'tower2.t')
 
-        self.connect('distLoads2.Px', 'tower2.Px')
-        self.connect('distLoads2.Py', 'tower2.Py')
-        self.connect('distLoads2.Pz', 'tower2.Pz')
-        self.connect('distLoads2.qdyn', 'tower2.qdyn')
-        #self.connect('distLoads2.outloads', 'tower2.WWloads')
+        self.connect('windLoads1.windLoads:Px', 'distLoads1.windLoads:Px')
+        self.connect('windLoads1.windLoads:Py', 'distLoads1.windLoads:Py')
+        self.connect('windLoads1.windLoads:Pz', 'distLoads1.windLoads:Pz')
+        self.connect('windLoads1.windLoads:qdyn', 'distLoads1.windLoads:qdyn')
+        self.connect('windLoads1.windLoads:beta', 'distLoads1.windLoads:beta')
+        self.connect('windLoads1.windLoads:Px0', 'distLoads1.windLoads:Px0')
+        self.connect('windLoads1.windLoads:Py0', 'distLoads1.windLoads:Py0')
+        self.connect('windLoads1.windLoads:Pz0', 'distLoads1.windLoads:Pz0')
+        self.connect('windLoads1.windLoads:qdyn0', 'distLoads1.windLoads:qdyn0')
+        self.connect('windLoads1.windLoads:beta0', 'distLoads1.windLoads:beta0')
+        self.connect('windLoads1.windLoads:z', 'distLoads1.windLoads:z')
+        self.connect('windLoads1.windLoads:d', 'distLoads1.windLoads:d')
 
-        # connect tower1 and tower2
-        self.connect('tower1.E', 'tower2.E')
-        self.connect('tower1.G', 'tower2.G')
-        self.connect('tower1.rho', 'tower2.rho')
-        self.connect('tower1.sigma_y', 'tower2.sigma_y')
-        self.connect('tower1.L_reinforced', 'tower2.L_reinforced')
-        self.connect('tower1.kidx', 'tower2.kidx')
-        self.connect('tower1.kx', 'tower2.kx')
-        self.connect('tower1.ky', 'tower2.ky')
-        self.connect('tower1.kz', 'tower2.kz')
-        self.connect('tower1.ktx', 'tower2.ktx')
-        self.connect('tower1.kty', 'tower2.kty')
-        self.connect('tower1.ktz', 'tower2.ktz')
-        self.connect('tower1.midx', 'tower2.midx')
-        self.connect('tower1.m', 'tower2.m')
-        self.connect('tower1.mIxx', 'tower2.mIxx')
-        self.connect('tower1.mIyy', 'tower2.mIyy')
-        self.connect('tower1.mIzz', 'tower2.mIzz')
-        self.connect('tower1.mIxy', 'tower2.mIxy')
-        self.connect('tower1.mIxz', 'tower2.mIxz')
-        self.connect('tower1.mIyz', 'tower2.mIyz')
-        self.connect('tower1.mrhox', 'tower2.mrhox')
-        self.connect('tower1.mrhoy', 'tower2.mrhoy')
-        self.connect('tower1.mrhoz', 'tower2.mrhoz')
-        self.connect('tower1.addGravityLoadForExtraMass', 'tower2.addGravityLoadForExtraMass')
-        self.connect('tower1.g', 'tower2.g')
+        self.connect('windLoads2.windLoads:Px', 'distLoads2.windLoads:Px')
+        self.connect('windLoads2.windLoads:Py', 'distLoads2.windLoads:Py')
+        self.connect('windLoads2.windLoads:Pz', 'distLoads2.windLoads:Pz')
+        self.connect('windLoads2.windLoads:qdyn', 'distLoads2.windLoads:qdyn')
+        self.connect('windLoads2.windLoads:beta', 'distLoads2.windLoads:beta')
+        self.connect('windLoads2.windLoads:Px0', 'distLoads2.windLoads:Px0')
+        self.connect('windLoads2.windLoads:Py0', 'distLoads2.windLoads:Py0')
+        self.connect('windLoads2.windLoads:Pz0', 'distLoads2.windLoads:Pz0')
+        self.connect('windLoads2.windLoads:qdyn0', 'distLoads2.windLoads:qdyn0')
+        self.connect('windLoads2.windLoads:beta0', 'distLoads2.windLoads:beta0')
+        self.connect('windLoads2.windLoads:z', 'distLoads2.windLoads:z')
+        self.connect('windLoads2.windLoads:d', 'distLoads2.windLoads:d')
 
-        self.connect('tower1.gamma_f', 'tower2.gamma_f')
-        self.connect('tower1.gamma_m', 'tower2.gamma_m')
-        self.connect('tower1.gamma_n', 'tower2.gamma_n')
-        self.connect('tower1.gamma_b', 'tower2.gamma_b')
-        self.connect('tower1.life', 'tower2.life')
-        self.connect('tower1.m_SN', 'tower2.m_SN')
-        self.connect('tower1.DC', 'tower2.DC')
-        self.connect('tower1.z_DEL', 'tower2.z_DEL')
-        self.connect('tower1.M_DEL', 'tower2.M_DEL')
-        self.connect('tower1.gamma_fatigue', 'tower2.gamma_fatigue')
-        self.connect('tower1.shear', 'tower2.shear')
-        self.connect('tower1.geom', 'tower2.geom')
-        self.connect('tower1.dx', 'tower2.dx')
-        self.connect('tower1.nM', 'tower2.nM')
-        self.connect('tower1.Mmethod', 'tower2.Mmethod')
-        self.connect('tower1.lump', 'tower2.lump')
-        self.connect('tower1.tol', 'tower2.tol')
-        self.connect('tower1.shift', 'tower2.shift')
+        self.connect('waveLoads1.waveLoads:Px', 'distLoads1.waveLoads:Px')
+        self.connect('waveLoads1.waveLoads:Py', 'distLoads1.waveLoads:Py')
+        self.connect('waveLoads1.waveLoads:Pz', 'distLoads1.waveLoads:Pz')
+        self.connect('waveLoads1.waveLoads:qdyn', 'distLoads1.waveLoads:qdyn')
+        self.connect('waveLoads1.waveLoads:beta', 'distLoads1.waveLoads:beta')
+        self.connect('waveLoads1.waveLoads:Px0', 'distLoads1.waveLoads:Px0')
+        self.connect('waveLoads1.waveLoads:Py0', 'distLoads1.waveLoads:Py0')
+        self.connect('waveLoads1.waveLoads:Pz0', 'distLoads1.waveLoads:Pz0')
+        self.connect('waveLoads1.waveLoads:qdyn0', 'distLoads1.waveLoads:qdyn0')
+        self.connect('waveLoads1.waveLoads:beta0', 'distLoads1.waveLoads:beta0')
+        self.connect('waveLoads1.waveLoads:z', 'distLoads1.waveLoads:z')
+        self.connect('waveLoads1.waveLoads:d', 'distLoads1.waveLoads:d')
 
-        # connections to gc
-        self.connect('d_param', 'gc.d')
-        self.connect('t_param', 'gc.t')
+        self.connect('waveLoads2.waveLoads:Px', 'distLoads2.waveLoads:Px')
+        self.connect('waveLoads2.waveLoads:Py', 'distLoads2.waveLoads:Py')
+        self.connect('waveLoads2.waveLoads:Pz', 'distLoads2.waveLoads:Pz')
+        self.connect('waveLoads2.waveLoads:qdyn', 'distLoads2.waveLoads:qdyn')
+        self.connect('waveLoads2.waveLoads:beta', 'distLoads2.waveLoads:beta')
+        self.connect('waveLoads2.waveLoads:Px0', 'distLoads2.waveLoads:Px0')
+        self.connect('waveLoads2.waveLoads:Py0', 'distLoads2.waveLoads:Py0')
+        self.connect('waveLoads2.waveLoads:Pz0', 'distLoads2.waveLoads:Pz0')
+        self.connect('waveLoads2.waveLoads:qdyn0', 'distLoads2.waveLoads:qdyn0')
+        self.connect('waveLoads2.waveLoads:beta0', 'distLoads2.waveLoads:beta0')
+        self.connect('waveLoads2.waveLoads:z', 'distLoads2.waveLoads:z')
+        self.connect('waveLoads2.waveLoads:d', 'distLoads2.waveLoads:d')
+
+
+
 
 
         # outputs TODO
@@ -832,42 +788,42 @@ if __name__ == '__main__':
     prob['d_param'] = d_param
     prob['t_param'] = t_param
     prob['z_full'] = z_full
-    prob['tower1.L_reinforced'] = L_reinforced
-    prob['distLoads1.yaw'] = yaw
+    prob['L_reinforced'] = L_reinforced
+    prob['yaw'] = yaw
 
     # --- material props ---
-    prob['tower1.E'] = E
-    prob['tower1.G'] = G
+    prob['E'] = E
+    prob['G'] = G
     prob['tower1.rho'] = rho
-    prob['tower1.sigma_y'] = sigma_y
+    prob['sigma_y'] = sigma_y
 
     # --- spring reaction data.  Use float('inf') for rigid constraints. ---
-    prob['tower1.kidx'] = kidx
-    prob['tower1.kx'] = kx
-    prob['tower1.ky'] = ky
-    prob['tower1.kz'] = kz
-    prob['tower1.ktx'] = ktx
-    prob['tower1.kty'] = kty
-    prob['tower1.ktz'] = ktz
+    prob['kidx'] = kidx
+    prob['kx'] = kx
+    prob['ky'] = ky
+    prob['kz'] = kz
+    prob['ktx'] = ktx
+    prob['kty'] = kty
+    prob['ktz'] = ktz
 
     # --- extra mass ----
-    prob['tower1.midx'] = midx
-    prob['tower1.m'] = m
-    prob['tower1.mIxx'] = mIxx
-    prob['tower1.mIyy'] = mIyy
-    prob['tower1.mIzz'] = mIzz
-    prob['tower1.mIxy'] = mIxy
-    prob['tower1.mIxz'] = mIxz
-    prob['tower1.mIyz'] = mIyz
-    prob['tower1.mrhox'] = mrhox
-    prob['tower1.mrhoy'] = mrhoy
-    prob['tower1.mrhoz'] = mrhoz
-    prob['tower1.addGravityLoadForExtraMass'] = addGravityLoadForExtraMass
+    prob['midx'] = midx
+    prob['m'] = m
+    prob['mIxx'] = mIxx
+    prob['mIyy'] = mIyy
+    prob['mIzz'] = mIzz
+    prob['mIxy'] = mIxy
+    prob['mIxz'] = mIxz
+    prob['mIyz'] = mIyz
+    prob['mrhox'] = mrhox
+    prob['mrhoy'] = mrhoy
+    prob['mrhoz'] = mrhoz
+    prob['addGravityLoadForExtraMass'] = addGravityLoadForExtraMass
     # -----------
 
     # --- wind ---
-    prob['wind1.zref'] = wind_zref
-    prob['wind1.z0'] = wind_z0
+    prob['zref'] = wind_zref
+    prob['z0'] = wind_z0
     # ---------------
 
     # # --- loading case 1: max Thrust ---
@@ -893,18 +849,18 @@ if __name__ == '__main__':
     # # ---------------
 
     # --- safety factors ---
-    prob['tower1.gamma_f'] = gamma_f
-    prob['tower1.gamma_m'] = gamma_m
-    prob['tower1.gamma_n'] = gamma_n
-    prob['tower1.gamma_b'] = gamma_b
+    prob['gamma_f'] = gamma_f
+    prob['gamma_m'] = gamma_m
+    prob['gamma_n'] = gamma_n
+    prob['gamma_b'] = gamma_b
     # ---------------
 
     # --- fatigue ---
-    prob['tower1.z_DEL'] = z_DEL
-    prob['tower1.M_DEL'] = M_DEL
-    prob['tower1.gamma_fatigue'] = gamma_fatigue
-    prob['tower1.life'] = life
-    prob['tower1.m_SN'] = m_SN
+    prob['z_DEL'] = z_DEL
+    prob['M_DEL'] = M_DEL
+    prob['gamma_fatigue'] = gamma_fatigue
+    prob['life'] = life
+    prob['m_SN'] = m_SN
     # ---------------
 
     # --- constraints ---
