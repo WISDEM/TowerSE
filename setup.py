@@ -5,7 +5,7 @@ from setuptools import setup
 
 setup(
     name='TowerSE',
-    version='0.1.5',
+    version='0.1.1',
     description='Tower Systems Engineering Model',
     author='S. Andrew Ning',
     author_email='andrew.ning@nrel.gov',
