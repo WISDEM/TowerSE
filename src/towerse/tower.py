@@ -14,7 +14,7 @@ HISTORY:  2012 created
           - 6/2015: A.N. major rewrite.  removed pBEAM.  can add spring stiffness anywhere.  can add mass anywhere.
             can use different material props throughout.
           - 7/2015 : R.D. modified to use commonse modules.
-          - 1/2018 : G.B. modified for easier use with other modules
+          - 1/2018 : G.B. modified for easier use with other modules, reducing user input burden, and shifting more to commonse
  """
 
 import math
@@ -24,8 +24,9 @@ from openmdao.api import Component, Group, Problem
 from commonse.WindWaveDrag import AeroHydroLoads, TowerWindDrag, TowerWaveDrag
 
 from commonse.environment import WindBase, WaveBase, SoilBase, PowerWind, LogWind
+from commonse.Tube import CylindricalShellProperties
 
-from commonse import Tube, gravity
+from commonse import gravity
 
 #from fusedwind.turbine.tower import TowerFromCSProps
 #from fusedwind.interface import implement_base
@@ -34,11 +35,6 @@ import commonse.UtilizationSupplement as Util
 
 import pyframe3dd.frame3dd as frame3dd
 
-
-
-# -----------------
-#  Helper Functions
-# -----------------
 
 
 # -----------------
@@ -78,49 +74,6 @@ class TowerDiscretization(Component):
         unknowns['z_full']  = np.linspace(unknowns['z_param'][0], unknowns['z_param'][-1], self.nFull) 
         unknowns['d_full']  = np.interp(unknowns['z_full'], unknowns['z_param'], params['d_param'])
         unknowns['t_full']  = np.interp(unknowns['z_full'], unknowns['z_param'], params['t_param'])
-
-
-class CylindricalShellProperties(Component):
-
-    def __init__(self, nFull):
-
-        super(CylindricalShellProperties, self).__init__()
-
-        self.add_param('d', np.zeros(nFull), units='m', desc='tower diameter at corresponding locations')
-        self.add_param('t', np.zeros(nFull), units='m', desc='shell thickness at corresponding locations')
-
-        self.add_output('Az', np.zeros(nFull), units='m**2', desc='cross-sectional area')
-        self.add_output('Asx', np.zeros(nFull), units='m**2', desc='x shear area')
-        self.add_output('Asy', np.zeros(nFull), units='m**2', desc='y shear area')
-        self.add_output('Jz', np.zeros(nFull), units='m**4', desc='polar moment of inertia')
-        self.add_output('Ixx', np.zeros(nFull), units='m**4', desc='area moment of inertia about x-axis')
-        self.add_output('Iyy', np.zeros(nFull), units='m**4', desc='area moment of inertia about y-axis')
-
-        # Derivatives
-        self.deriv_options['type'] = 'fd'
-        self.deriv_options['form'] = 'central'
-
-
-    def solve_nonlinear(self, params, unknowns, resids):
-
-        tube = Tube(params['d'],params['t'])
-
-        unknowns['Az'] = tube.Area
-        unknowns['Asx'] = tube.Asx
-        unknowns['Asy'] = tube.Asy
-        unknowns['Jz'] = tube.J0
-        unknowns['Ixx'] = tube.Jxx
-        unknowns['Iyy'] = tube.Jyy
-
-##        ro = self.d/2.0 + self.t/2.0
-##        ri = self.d/2.0 - self.t/2.0
-##        self.Az = math.pi * (ro**2 - ri**2)
-##        self.Asx = self.Az / (0.54414 + 2.97294*(ri/ro) - 1.51899*(ri/ro)**2)
-##        self.Asy = self.Az / (0.54414 + 2.97294*(ri/ro) - 1.51899*(ri/ro)**2)
-##        self.Jz = math.pi/2.0 * (ro**4 - ri**4)
-##        self.Ixx = self.Jz/2.0
-##        self.Iyy = self.Jz/2.0
-
 
 
 #@implement_base(TowerFromCSProps)
