@@ -27,6 +27,7 @@ from commonse.environment import WindBase, WaveBase, SoilBase, PowerWind, LogWin
 from commonse.Tube import CylindricalShellProperties
 
 from commonse import gravity
+import commonse.Frustum as Frustum
 
 #from fusedwind.turbine.tower import TowerFromCSProps
 #from fusedwind.interface import implement_base
@@ -63,10 +64,15 @@ class TowerDiscretization(Component):
         self.add_output('z_full', np.zeros(nFull), units='m', desc='locations along tower')
         self.add_output('d_full', np.zeros(nFull), units='m', desc='tower diameter at corresponding locations')
         self.add_output('t_full', np.zeros(nFull), units='m', desc='shell thickness at corresponding locations')
-
+        # Convenience outputs for export to other modules
+        self.add_output('base_diameter', val=0.0, units='m', desc='diameter at tower base')
+        self.add_output('hub_height', val=0.0, units='m', desc='diameter at tower base')
+        
         # Derivatives
         self.deriv_options['type'] = 'fd'
         self.deriv_options['form'] = 'central'
+        self.deriv_options['step_calc'] = 'relative'
+        self.deriv_options['step_size'] = 1e-5
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -74,8 +80,69 @@ class TowerDiscretization(Component):
         unknowns['z_full']  = np.linspace(unknowns['z_param'][0], unknowns['z_param'][-1], self.nFull) 
         unknowns['d_full']  = np.interp(unknowns['z_full'], unknowns['z_param'], params['d_param'])
         unknowns['t_full']  = np.interp(unknowns['z_full'], unknowns['z_param'], params['t_param'])
+        unknowns['base_diameter'] = params['d_param'][0]
+        unknowns['hub_height']    = unknowns['z_param'][-1]
 
+        
+class TowerMass(Component):
 
+    def __init__(self, nPoints):
+        super(TowerMass, self).__init__()
+        
+        self.add_param('d_param', val=np.zeros(nPoints), units='m', desc='tower diameter at corresponding locations')
+        self.add_param('t_param', val=np.zeros(nPoints), units='m', desc='shell thickness at corresponding locations')
+        self.add_param('z_param', val=np.zeros(nPoints), units='m', desc='parameterized locations along tower, linear lofting between')
+        self.add_param('rho', 0.0, units='kg/m**3', desc='material density')
+        self.add_param('outfitting_factor', val=1.0, desc='Multiplier that accounts for secondary structure mass inside of tower')
+        
+        self.add_output('mass', val=0.0, units='kg', desc='Total tower mass')
+        self.add_output('center_of_mass', val=0.0, units='m', desc='z-position of center of mass of tower')
+        self.add_output('section_center_of_mass', val=np.zeros(nPoints-1), units='m', desc='z position of center of mass of each can in the tower')
+        
+    def solve_nonlinear(self, params, unknowns, resids):
+        # Unpack variables for thickness and average radius at each can interface
+        Tb = params['t_param'][:-1]
+        Tt = params['t_param'][1:]
+        Rb = 0.5*params['d_param'][:-1] - 0.5*Tb
+        Rt = 0.5*params['d_param'][1:] - 0.5*Tt
+        zz = params['z_param']
+        H  = np.diff(zz)
+
+        # Total mass of tower
+        V_shell = Frustum.frustumShellVolume(Rb, Rt, Tb, Tt, H)
+        unknowns['mass'] = params['outfitting_factor'] * params['rho'] * V_shell.sum()
+        
+        # Center of mass of each can/section
+        cm_section = Frustum.frustumShellCG(Rb, Rt, H)
+        unknowns['section_center_of_mass'] = zz[:-1] + cm_section
+
+        # Center of mass of tower
+        unknowns['center_of_mass'] = np.dot(V_shell, unknowns['section_center_of_mass']) / V_shell.sum()
+
+        
+class TurbineMass(Component):
+
+    def __init__(self):
+        super(TurbineMass, self).__init__()
+        
+        self.add_param('hubH', val=0.0, units='m', desc='Hub-height')
+        self.add_param('rna_mass', val=0.0, units='kg', desc='Total tower mass')
+        self.add_param('rna_offset', val=np.zeros((3,)), units='m', desc='z-position of center of mass of tower')
+        self.add_param('tower_mass', val=0.0, units='kg', desc='Total tower mass')
+        self.add_param('tower_center_of_mass', val=0.0, units='m', desc='z-position of center of mass of tower')
+
+        self.add_output('turbine_mass', val=0.0, units='kg', desc='Total mass of tower+rna')
+        self.add_output('turbine_center_of_mass', val=np.zeros((3,)), units='m', desc='xyz-position of tower+rna center of mass')
+        
+    def solve_nonlinear(self, params, unknowns, resids):
+        unknowns['turbine_mass'] = params['rna_mass'] + params['tower_mass']
+        
+        cg_rna   = params['rna_offset'] + np.array([0.0, 0.0, params['hubH']])
+        cg_tower = np.array([0.0, 0.0, params['tower_center_of_mass']])
+        unknowns['turbine_center_of_mass'] = (params['rna_mass']*cg_rna + params['tower_mass']*cg_tower) / unknowns['turbine_mass']
+
+        
+    
 #@implement_base(TowerFromCSProps)
 class TowerFrame3DD(Component):
 
@@ -101,9 +168,6 @@ class TowerFrame3DD(Component):
         self.add_param('d', np.zeros(nFull), units='m', desc='effective tower diameter for section')
         self.add_param('t', np.zeros(nFull), units='m', desc='effective shell thickness for section')
         self.add_param('L_reinforced', 0.0, units='m')
-
-        # spring reaction data
-        self.add_param('kidx', [], desc='indices of z where external stiffness reactions should be applied.', pass_by_obj=True)
 
         # extra mass
         self.add_param('m', 0.0, units='kg', desc='added mass')
@@ -138,7 +202,7 @@ class TowerFrame3DD(Component):
 
         # fatigue parameters
         self.add_param('life', 20.0, desc='fatigue life of tower')
-        self.add_param('m_SN', 4, desc='slope of S/N curve')
+        self.add_param('m_SN', 4, desc='slope of S/N curve', pass_by_obj=True)
         self.add_param('DC', 80.0, desc='standard value of stress')
         self.add_param('gamma_fatigue', 1.755, desc='total safety factor for fatigue')
         self.add_param('z_DEL', np.zeros(nDEL), desc='absolute z coordinates of corresponding fatigue parameters')
@@ -146,18 +210,17 @@ class TowerFrame3DD(Component):
         #TODO should make z relative to the height of the turbine
 
         # options
-        self.add_param('shear', True, desc='include shear deformation')
-        self.add_param('geom', False, desc='include geometric stiffness')
+        self.add_param('shear', True, desc='include shear deformation', pass_by_obj=True)
+        self.add_param('geom', False, desc='include geometric stiffness', pass_by_obj=True)
         self.add_param('dx', 5.0, desc='z-axis increment for internal forces')
-        self.add_param('nM', 2, desc='number of desired dynamic modes of vibration (below only necessary if nM > 0)')
-        self.add_param('Mmethod', 1, desc='1: subspace Jacobi, 2: Stodola')
-        self.add_param('lump', 0, desc='0: consistent mass, 1: lumped mass matrix')
+        self.add_param('nM', 2, desc='number of desired dynamic modes of vibration (below only necessary if nM > 0)', pass_by_obj=True)
+        self.add_param('Mmethod', 1, desc='1: subspace Jacobi, 2: Stodola', pass_by_obj=True)
+        self.add_param('lump', 0, desc='0: consistent mass, 1: lumped mass matrix', pass_by_obj=True)
         self.add_param('tol', 1e-9, desc='mode shape tolerance')
         self.add_param('shift', 0.0, desc='shift value ... for unrestrained structures')
 
 
         # outputs
-        self.add_output('mass', 0.0)
         self.add_output('f1', 0.0, units='Hz', desc='First natural frequency')
         self.add_output('f2', 0.0, units='Hz', desc='Second natural frequency')
         self.add_output('top_deflection', 0.0, units='m', desc='Deflection of tower top in yaw-aligned +x direction')
@@ -165,12 +228,18 @@ class TowerFrame3DD(Component):
         self.add_output('shell_buckling', np.zeros(nFull), desc='Shell buckling constraint.  Should be < 1 for feasibility.  Includes safety factors')
         self.add_output('global_buckling', np.zeros(nFull), desc='Global buckling constraint.  Should be < 1 for feasibility.  Includes safety factors')
         self.add_output('damage', np.zeros(nFull), desc='Fatigue damage at each tower section')
-        self.add_output('weldability', np.zeros(nFull))
-        self.add_output('manufacturability', np.zeros(nFull))
-
+        self.add_output('turbine_Fx', val=0.0, units='N', desc='Total x-force on tower+rna')
+        self.add_output('turbine_Fy', val=0.0, units='N', desc='Total y-force on tower+rna')
+        self.add_output('turbine_Fz', val=0.0, units='N', desc='Total z-force on tower+rna')
+        self.add_output('turbine_Mx', val=0.0, units='N*m', desc='Total x-moment on tower+rna measured at base')
+        self.add_output('turbine_My', val=0.0, units='N*m', desc='Total y-moment on tower+rna measured at base')
+        self.add_output('turbine_Mz', val=0.0, units='N*m', desc='Total z-moment on tower+rna measured at base')
+        
         # Derivatives
         self.deriv_options['type'] = 'fd'
         self.deriv_options['form'] = 'central'
+        self.deriv_options['step_calc'] = 'relative'
+        self.deriv_options['step_size'] = 1e-5
 
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -178,7 +247,7 @@ class TowerFrame3DD(Component):
         # ------- node data ----------------
         z = params['z']
         n = len(z)
-        node = np.arange(1, n+1)
+        node = np.arange(1, n+1, dtype=np.int64)
         x = np.zeros(n)
         y = np.zeros(n)
         r = np.zeros(n)
@@ -195,11 +264,9 @@ class TowerFrame3DD(Component):
         # ------ reaction data ------------
 
         # rigid base
-        tempArray = np.array(params['kidx'])
-        myones    = np.ones(tempArray.shape)
-        rnode      = tempArray + np.int64(myones)  # add one because 0-based index but 1-based node numbering
-        rigid     = np.inf
-        kx = ky = kz = ktx = kty = ktz = rigid * myones
+        rnode = np.array([ node[0] ])  # add one because 0-based index but 1-based node numbering
+        rigid = np.inf
+        kx = ky = kz = ktx = kty = ktz = rigid * np.ones(rnode.shape)
 
         reactions = frame3dd.ReactionData(rnode, kx, ky, kz, ktx, kty, ktz, rigid)
         # -----------------------------------
@@ -240,12 +307,12 @@ class TowerFrame3DD(Component):
         # extra node inertia data
         N = np.array([ node[-1] ])
         m = np.array([ params['m'] ])
-        Ixx = np.array([ params['mIxx'] ])
-        Iyy = np.array([ params['mIyy'] ])
-        Izz = np.array([ params['mIzz'] ])
-        Ixy = np.array([ params['mIxy'] ])
-        Iyz = np.array([ params['mIyz'] ])
-        Ixz = np.array([ params['mIxz'] ])
+        mIxx = np.array([ params['mIxx'] ])
+        mIyy = np.array([ params['mIyy'] ])
+        mIzz = np.array([ params['mIzz'] ])
+        mIxy = np.array([ params['mIxy'] ])
+        mIyz = np.array([ params['mIyz'] ])
+        mIxz = np.array([ params['mIxz'] ])
         mrhox = np.array([ params['mrho'][0] ])
         mrhoy = np.array([ params['mrho'][1] ])
         mrhoz = np.array([ params['mrho'][2] ])
@@ -305,9 +372,6 @@ class TowerFrame3DD(Component):
         displacements, forces, reactions, internalForces, mass, modal = tower.run()
         iCase = 0
 
-        # mass
-        unknowns['mass'] = mass.struct_mass
-
         # natural frequncies
         unknowns['f1'] = modal.freq[0]
         unknowns['f2'] = modal.freq[1]
@@ -334,6 +398,14 @@ class TowerFrame3DD(Component):
         Myy = np.concatenate([[-Myy[0]], Myy[1::2]])
         Mxx = np.concatenate([[-Mxx[0]], Mxx[1::2]])
 
+        # Record total forces and moments
+        unknowns['turbine_Fx'] = Vx[0]
+        unknowns['turbine_Fy'] = Vy[0]
+        unknowns['turbine_Fz'] = Fz[0]
+        unknowns['turbine_Mx'] = Mxx[0]
+        unknowns['turbine_My'] = Myy[0]
+        unknowns['turbine_Mz'] = Mzz[0]
+        
         # axial and shear stress
         ##R = self.d/2.0
         ##x_stress = R*np.cos(self.theta_stress)
@@ -374,7 +446,7 @@ class TowerFrame3DD(Component):
         # TODO: more hack NOT SURE WHAT THIS IS, but it was there originally, commented out for now
 #        damage = np.concatenate([np.zeros(len(self.z)-len(z)), damage])
 
-        #TODO weldability and manufacturability??
+
 # -----------------
 #  Assembly
 # -----------------
@@ -386,6 +458,8 @@ class TowerSE(Group):
         super(TowerSE, self).__init__()
 
         self.add('geometry', TowerDiscretization(nPoints, nFull), promotes=['*'])
+        self.add('tm', TowerMass(nPoints), promotes=['*'])
+
         if wind.lower() == 'powerwind':
             self.add('wind', PowerWind(nFull), promotes=['zref','z0'])
         elif wind.lower() == 'logwind':
@@ -398,13 +472,21 @@ class TowerSE(Group):
         self.add('distLoads', AeroHydroLoads(nFull), promotes=['yaw'])
         self.add('props', CylindricalShellProperties(nFull), promotes=['Az','Asx','Asy','Jz','Ixx','Iyy'])
         self.add('tower', TowerFrame3DD(nFull, nDEL), promotes=['E','G', 'rho','sigma_y','L_reinforced',
-                                                                'kidx','m','mIxx','mIyy','mIzz','mIxy','mIxz','mIyz',
+                                                                'm','mIxx','mIyy','mIzz','mIxy','mIxz','mIyz',
                                                                 'mrho','gamma_f','gamma_m','gamma_n','gamma_b',
                                                                 'life','m_SN','DC','z_DEL','M_DEL','gamma_fatigue',
                                                                 'shear','geom','dx','nM','Mmethod','lump','tol',
                                                                 'shift','Az','Asx','Asy','Jz','Ixx','Iyy'])
         self.add('gc', Util.GeometricConstraints(nPoints))
-
+        self.add('turb', TurbineMass())
+        
+        # Connections to turb
+        self.connect('hub_height', 'turb.hubH')
+        self.connect('m', 'turb.rna_mass')
+        self.connect('mrho', 'turb.rna_offset')
+        self.connect('mass', 'turb.tower_mass')
+        self.connect('center_of_mass', 'turb.tower_center_of_mass')
+        
         # connections to gc
         self.connect('d_param', 'gc.d')
         self.connect('t_param', 'gc.t')
@@ -474,22 +556,11 @@ class TowerSE(Group):
         self.connect('waveLoads.waveLoads:d', 'distLoads.waveLoads:d')
 
 
-        # outputs TODO
-        """
-        self.connect('tower.mass', 'mass')
-        self.connect('tower.f1', 'f1')
-        self.connect('tower.top_deflection', 'top_deflection1')
-        self.connect('tower.stress', 'stress1')
-        self.connect('tower.global_buckling', 'global_buckling1')
-        self.connect('tower.shell_buckling', 'shell_buckling1')
-        self.connect('tower.damage', 'damage')
-        self.connect('gc.weldability', 'weldability')
-        self.connect('gc.manufacturability', 'manufacturability')
-        """
-
         # Derivatives
         self.deriv_options['type'] = 'fd'
         self.deriv_options['form'] = 'central'
+        self.deriv_options['step_calc'] = 'relative'
+        self.deriv_options['step_size'] = 1e-5
 
         
 if __name__ == '__main__':
@@ -500,20 +571,18 @@ if __name__ == '__main__':
     # --- geometry ----
     h_param = np.diff(np.array([0.0, 43.8, 87.6]))
     d_param = np.array([6.0, 4.935, 3.87])
-    t_param = [0.027*1.3, 0.023*1.3, 0.019*1.3]
+    t_param = 1.3*np.array([0.027, 0.023, 0.019])
     n = 15
     L_reinforced = 30.0  # [m] buckling length
     theta_stress = 0.0
     yaw = 0.0
-
+    Koutfitting = 1.07
+    
     # --- material props ---
     E = 210e9
     G = 80.8e9
     rho = 8500.0
     sigma_y = 450.0e6
-
-    # --- spring reaction data.  Use float('inf') for rigid constraints. ---
-    kidx = [0] # applied at base
 
     # --- extra mass ----
     m = np.array([285598.8])
@@ -598,15 +667,13 @@ if __name__ == '__main__':
     prob['t_param'] = t_param
     prob['L_reinforced'] = L_reinforced
     prob['yaw'] = yaw
-
+    prob['outfitting_factor'] = Koutfitting
+    
     # --- material props ---
     prob['E'] = E
     prob['G'] = G
     prob['rho'] = rho
     prob['sigma_y'] = sigma_y
-
-    # --- spring reaction data.  Use float('inf') for rigid constraints. ---
-    prob['kidx'] = kidx
 
     # --- extra mass ----
     prob['m'] = m
@@ -661,7 +728,8 @@ if __name__ == '__main__':
 
     z = prob['z_full']
 
-    print 'mass (kg) =', prob['tower.mass']
+    print 'mass (kg) =', prob['mass']
+    print 'cg (m) =', prob['center_of_mass']
     print 'f1 (Hz) =', prob['tower.f1']
     print 'top_deflection1 (m) =', prob['tower.top_deflection']
     print 'weldability =', prob['gc.weldability']
@@ -695,7 +763,8 @@ if __name__ == '__main__':
 
     prob.run()
 
-    print 'mass (kg) =', prob['tower.mass']
+    print 'mass (kg) =', prob['mass']
+    print 'cg (m) =', prob['center_of_mass']
     print 'f2 (Hz) =', prob['tower.f2']
     print 'top_deflection1 (m) =', prob['tower.top_deflection']
     print 'weldability =', prob['gc.weldability']
