@@ -19,7 +19,7 @@ HISTORY:  2012 created
 
 import math
 import numpy as np
-from openmdao.api import Component, Group, Problem
+from openmdao.api import Component, Group, Problem, IndepVarComp
 
 from commonse.WindWaveDrag import AeroHydroLoads, TowerWindDrag, TowerWaveDrag
 
@@ -457,78 +457,142 @@ class TowerSE(Group):
 
         super(TowerSE, self).__init__()
 
-        self.add('geometry', TowerDiscretization(nPoints, nFull), promotes=['*'])
-        self.add('tm', TowerMass(nPoints), promotes=['*'])
+        # Geometry and Tower/Turbine Mass
+        self.add('h_param', IndepVarComp('h_param', np.zeros(nPoints-1)), promotes=['*'])
+        self.add('d_param', IndepVarComp('d_param', np.zeros(nPoints)), promotes=['*'])
+        self.add('t_param', IndepVarComp('t_param', np.zeros(nPoints)), promotes=['*'])
+        self.add('rho', IndepVarComp('rho', 0.0), promotes=['*'])
+        self.add('outfitting_factor', IndepVarComp('outfitting_factor', 0.0), promotes=['*'])
+        self.add('rna_mass', IndepVarComp('rna_mass', 0.0), promotes=['*'])
+        self.add('rna_offset', IndepVarComp('rna_offset',val=np.zeros((3,))), promotes=['*'])
+
+        # Wind and Wave
+        self.add('water_density', IndepVarComp('water_density', 1025.0), promotes=['*'])
+        self.add('water_viscosity', IndepVarComp('water_viscosity', 1.3351e-3), promotes=['*'])
+        self.add('air_density', IndepVarComp('air_density', 1.225), promotes=['*'])
+        self.add('air_viscosity', IndepVarComp('air_viscosity', 1.7934e-5), promotes=['*'])
+        self.add('Uref', IndepVarComp('Uref', 0.0), promotes=['*'])
+        self.add('zref', IndepVarComp('zref', 0.0), promotes=['*'])
+        self.add('betaWind', IndepVarComp('betaWind', 0.0), promotes=['*'])
+        self.add('z0', IndepVarComp('z0', 0.0), promotes=['*'])
+        self.add('depth', IndepVarComp('depth', 0.0), promotes=['*'])
+        self.add('cd_usr', IndepVarComp('cd_usr', np.inf), promotes=['*'])
+        self.add('U0', IndepVarComp('U0', 0.0), promotes=['*'])
+        self.add('A0', IndepVarComp('A0', 0.0), promotes=['*'])
+        self.add('beta0', IndepVarComp('beta0', 0.0), promotes=['*'])
+        self.add('cm', IndepVarComp('cm', 2.0), promotes=['*'])
+        self.add('yaw', IndepVarComp('yaw', 0.0), promotes=['*'])
+
+        # Tower
+        self.add('DC', IndepVarComp('DC', 80.0), promotes=['*'])
+        self.add('E', IndepVarComp('E', 0.0), promotes=['*'])
+        self.add('Fx', IndepVarComp('Fx', 0.0), promotes=['*'])
+        self.add('Fy', IndepVarComp('Fy', 0.0), promotes=['*'])
+        self.add('Fz', IndepVarComp('Fz', 0.0), promotes=['*'])
+        self.add('G', IndepVarComp('G', 0.0), promotes=['*'])
+        self.add('L_reinforced', IndepVarComp('L_reinforced', 0.0), promotes=['*'])
+        self.add('M_DEL', IndepVarComp('M_DEL', np.zeros(nDEL)), promotes=['*'])
+        self.add('Mmethod', IndepVarComp('Mmethod', 1, pass_by_obj=True), promotes=['*'])
+        self.add('Mxx', IndepVarComp('Mxx', 0.0), promotes=['*'])
+        self.add('Myy', IndepVarComp('Myy', 0.0), promotes=['*'])
+        self.add('Mzz', IndepVarComp('Mzz', 0.0), promotes=['*'])
+        self.add('dx', IndepVarComp('dx', 5.0), promotes=['*'])
+        self.add('gamma_b', IndepVarComp('gamma_b', 0.0), promotes=['*'])
+        self.add('gamma_f', IndepVarComp('gamma_f', 0.0), promotes=['*'])
+        self.add('gamma_fatigue', IndepVarComp('gamma_fatigue', 0.0), promotes=['*'])
+        self.add('gamma_m', IndepVarComp('gamma_m', 0.0), promotes=['*'])
+        self.add('gamma_n', IndepVarComp('gamma_n', 0.0), promotes=['*'])
+        self.add('geom', IndepVarComp('geom', False, pass_by_obj=True), promotes=['*'])
+        self.add('life', IndepVarComp('life', 0.0), promotes=['*'])
+        self.add('lump', IndepVarComp('lump', 0, pass_by_obj=True), promotes=['*'])
+        self.add('rna_Ixx', IndepVarComp('rna_Ixx', 0.0), promotes=['*'])
+        self.add('rna_Ixy', IndepVarComp('rna_Ixy', 0.0), promotes=['*'])
+        self.add('rna_Ixz', IndepVarComp('rna_Ixz', 0.0), promotes=['*'])
+        self.add('rna_Iyy', IndepVarComp('rna_Iyy', 0.0), promotes=['*'])
+        self.add('rna_Iyz', IndepVarComp('rna_Iyz', 0.0), promotes=['*'])
+        self.add('rna_Izz', IndepVarComp('rna_Izz', 0.0), promotes=['*'])
+        self.add('m_SN', IndepVarComp('m_SN', 4, pass_by_obj=True), promotes=['*'])
+        self.add('nM', IndepVarComp('nM', 2, pass_by_obj=True), promotes=['*'])
+        self.add('shear', IndepVarComp('shear', True, pass_by_obj=True), promotes=['*'])
+        self.add('shift', IndepVarComp('shift', 0.0), promotes=['*'])
+        self.add('sigma_y', IndepVarComp('sigma_y', 0.0), promotes=['*'])
+        self.add('tol', IndepVarComp('tol', 1e-9), promotes=['*'])
+        self.add('z_DEL', IndepVarComp('z_DEL', np.zeros(nDEL)), promotes=['*'])
+        
+        # Constraints
+        self.add('min_d_to_t', IndepVarComp('min_d_to_t', 0.0), promotes=['*'])
+        self.add('min_taper', IndepVarComp('min_taper', 0.0), promotes=['*'])
+        
+        # All the components
+        self.add('geometry', TowerDiscretization(nPoints, nFull))
+        self.add('tm', TowerMass(nPoints))
 
         if wind.lower() == 'powerwind':
-            self.add('wind', PowerWind(nFull), promotes=['zref','z0'])
+            self.add('wind', PowerWind(nFull))
+            self.add('shearExp', IndepVarComp('shearExp', 0.0), promotes=['*'])
+            self.connect('shearExp', 'wind.shearExp')
         elif wind.lower() == 'logwind':
-            self.add('wind', LogWind(nFull), promotes=['zref','z0'])
+            self.add('wind', LogWind(nFull))
+            self.add('z_roughness', IndepVarComp('z_roughness', 10.0), promotes=['*'])
+            self.connect('z_roughness', 'wind.z_roughness')
         else:
             raise ValueError('Unknown wind type, '+wind)
+        
         self.add('wave', WaveBase(nFull))
         self.add('windLoads', TowerWindDrag(nFull))
         self.add('waveLoads', TowerWaveDrag(nFull))
-        self.add('distLoads', AeroHydroLoads(nFull), promotes=['yaw'])
-        self.add('props', CylindricalShellProperties(nFull), promotes=['Az','Asx','Asy','Jz','Ixx','Iyy'])
-        self.add('tower', TowerFrame3DD(nFull, nDEL), promotes=['E','G', 'rho','sigma_y','L_reinforced',
-                                                                'm','mIxx','mIyy','mIzz','mIxy','mIxz','mIyz',
-                                                                'mrho','gamma_f','gamma_m','gamma_n','gamma_b',
-                                                                'life','m_SN','DC','z_DEL','M_DEL','gamma_fatigue',
-                                                                'shear','geom','dx','nM','Mmethod','lump','tol',
-                                                                'shift','Az','Asx','Asy','Jz','Ixx','Iyy'])
+        self.add('distLoads', AeroHydroLoads(nFull))
+        self.add('props', CylindricalShellProperties(nFull))
+        self.add('tower', TowerFrame3DD(nFull, nDEL))
         self.add('gc', Util.GeometricConstraints(nPoints))
         self.add('turb', TurbineMass())
-        
-        # Connections to turb
-        self.connect('hub_height', 'turb.hubH')
-        self.connect('m', 'turb.rna_mass')
-        self.connect('mrho', 'turb.rna_offset')
-        self.connect('mass', 'turb.tower_mass')
-        self.connect('center_of_mass', 'turb.tower_center_of_mass')
-        
-        # connections to gc
-        self.connect('d_param', 'gc.d')
-        self.connect('t_param', 'gc.t')
 
+
+        # Connections for geometry and mass
+        self.connect('h_param', 'geometry.h_param')
+        self.connect('d_param', ['geometry.d_param', 'tm.d_param', 'gc.d'])
+        self.connect('t_param', ['geometry.t_param', 'tm.t_param', 'gc.t'])
+        self.connect('rho', ['tm.rho', 'tower.rho'])
+        self.connect('outfitting_factor', 'tm.outfitting_factor')
+        self.connect('rna_mass', ['turb.rna_mass', 'tower.m'])
+        self.connect('rna_offset', ['turb.rna_offset', 'tower.mrho'])
+        
+        self.connect('geometry.hub_height', 'turb.hubH')
+        self.connect('geometry.z_param', 'tm.z_param')
+        self.connect('geometry.z_full', ['wind.z', 'wave.z', 'windLoads.z', 'waveLoads.z', 'distLoads.z', 'tower.z'])
+        self.connect('geometry.d_full', ['windLoads.d', 'waveLoads.d', 'props.d', 'tower.d', 'tower.d'])
+        self.connect('geometry.t_full', ['props.t', 'tower.t'])
+
+        self.connect('tm.mass', 'turb.tower_mass')
+        self.connect('tm.center_of_mass', 'turb.tower_center_of_mass')
+        
         # connections to wind1
-        self.connect('z_full', 'wind.z')
-
-        # connections to wave1 and wave2
-        self.connect('z_full', 'wave.z')
-
+        self.connect('Uref', 'wind.Uref')
+        self.connect('zref', 'wind.zref')
+        self.connect('betaWind', 'wind.betaWind')
+        self.connect('z0', ['wind.z0', 'wave.z_surface'])
+        self.connect('depth', ['wave.z_floor', 'waveLoads.wlevel'])
+        
         # connections to windLoads1
         self.connect('wind.U', 'windLoads.U')
-        self.connect('z_full', 'windLoads.z')
-        self.connect('d_full', 'windLoads.d')
         self.connect('wind.beta', 'windLoads.beta')
+        self.connect('air_density', 'windLoads.rho')
+        self.connect('air_viscosity', 'windLoads.mu')
+        self.connect('cd_usr', ['windLoads.cd_usr', 'waveLoads.cd_usr'])
 
         # connections to waveLoads1
         self.connect('wave.U', 'waveLoads.U')
         self.connect('wave.A', 'waveLoads.A')
-        self.connect('z_full', 'waveLoads.z')
-        self.connect('d_full', 'waveLoads.d')
         self.connect('wave.beta', 'waveLoads.beta')
+        self.connect('water_density', 'waveLoads.rho')
+        self.connect('water_viscosity', 'waveLoads.mu')
+        self.connect('U0', 'waveLoads.U0')
+        self.connect('A0', 'waveLoads.A0')
+        self.connect('beta0', 'waveLoads.beta0')
+        self.connect('cm', 'waveLoads.cm')
 
         # connections to distLoads1
-        self.connect('z_full', 'distLoads.z')
-
-        # connections to props
-        self.connect('d_full', 'props.d')
-        self.connect('t_full', 'props.t')
-
-        # connect to tower1
-        self.connect('z_full', 'tower.z')
-
-        self.connect('d_full', 'tower.d')
-        self.connect('t_full', 'tower.t')
-
-        self.connect('distLoads.Px',   'tower.Px')
-        self.connect('distLoads.Py',   'tower.Py')
-        self.connect('distLoads.Pz',   'tower.Pz')
-        self.connect('distLoads.qdyn', 'tower.qdyn')
-        #self.connect('distLoads.outloads', 'tower.WWloads')
-
+        self.connect('yaw', 'distLoads.yaw')
         self.connect('windLoads.windLoads:Px', 'distLoads.windLoads:Px')
         self.connect('windLoads.windLoads:Py', 'distLoads.windLoads:Py')
         self.connect('windLoads.windLoads:Pz', 'distLoads.windLoads:Pz')
@@ -555,7 +619,59 @@ class TowerSE(Group):
         self.connect('waveLoads.waveLoads:z', 'distLoads.waveLoads:z')
         self.connect('waveLoads.waveLoads:d', 'distLoads.waveLoads:d')
 
+        # Tower connections
+        self.connect('DC', 'tower.DC')
+        self.connect('E', 'tower.E')
+        self.connect('Fx', 'tower.Fx')
+        self.connect('Fy', 'tower.Fy')
+        self.connect('Fz', 'tower.Fz')
+        self.connect('G', 'tower.G')
+        self.connect('L_reinforced', 'tower.L_reinforced')
+        self.connect('M_DEL', 'tower.M_DEL')
+        self.connect('Mmethod', 'tower.Mmethod')
+        self.connect('Mxx', 'tower.Mxx')
+        self.connect('Myy', 'tower.Myy')
+        self.connect('Mzz', 'tower.Mzz')
+        self.connect('dx', 'tower.dx')
+        self.connect('gamma_b', 'tower.gamma_b')
+        self.connect('gamma_f', 'tower.gamma_f')
+        self.connect('gamma_fatigue', 'tower.gamma_fatigue')
+        self.connect('gamma_m', 'tower.gamma_m')
+        self.connect('gamma_n', 'tower.gamma_n')
+        self.connect('geom', 'tower.geom')
+        self.connect('life', 'tower.life')
+        self.connect('lump', 'tower.lump')
+        self.connect('rna_Ixx', 'tower.mIxx')
+        self.connect('rna_Ixy', 'tower.mIxy')
+        self.connect('rna_Ixz', 'tower.mIxz')
+        self.connect('rna_Iyy', 'tower.mIyy')
+        self.connect('rna_Iyz', 'tower.mIyz')
+        self.connect('rna_Izz', 'tower.mIzz')
+        self.connect('m_SN', 'tower.m_SN')
+        self.connect('nM', 'tower.nM')
+        self.connect('shear', 'tower.shear')
+        self.connect('shift', 'tower.shift')
+        self.connect('sigma_y', 'tower.sigma_y')
+        self.connect('tol', 'tower.tol')
+        self.connect('z_DEL', 'tower.z_DEL')
 
+        self.connect('props.Az', 'tower.Az')
+        self.connect('props.Asx', 'tower.Asx')
+        self.connect('props.Asy', 'tower.Asy')
+        self.connect('props.Jz', 'tower.Jz')
+        self.connect('props.Ixx', 'tower.Ixx')
+        self.connect('props.Iyy', 'tower.Iyy')
+        
+        self.connect('distLoads.Px',   'tower.Px')
+        self.connect('distLoads.Py',   'tower.Py')
+        self.connect('distLoads.Pz',   'tower.Pz')
+        self.connect('distLoads.qdyn', 'tower.qdyn')
+
+        # Constraints
+        self.connect('min_d_to_t', 'gc.min_d_to_t')
+        self.connect('min_taper', 'gc.min_taper')
+
+        
         # Derivatives
         self.deriv_options['type'] = 'fd'
         self.deriv_options['form'] = 'central'
@@ -657,7 +773,7 @@ if __name__ == '__main__':
     prob.setup()
 
     if wind=='PowerWind':
-        prob['wind.shearExp'] = shearExp
+        prob['shearExp'] = shearExp
 
     # assign values to params
 
@@ -676,14 +792,14 @@ if __name__ == '__main__':
     prob['sigma_y'] = sigma_y
 
     # --- extra mass ----
-    prob['m'] = m
-    prob['mIxx'] = mIxx
-    prob['mIyy'] = mIyy
-    prob['mIzz'] = mIzz
-    prob['mIxy'] = mIxy
-    prob['mIxz'] = mIxz
-    prob['mIyz'] = mIyz
-    prob['mrho'] = mrho
+    prob['rna_mass'] = m
+    prob['rna_Ixx'] = mIxx
+    prob['rna_Iyy'] = mIyy
+    prob['rna_Izz'] = mIzz
+    prob['rna_Ixy'] = mIxy
+    prob['rna_Ixz'] = mIxz
+    prob['rna_Iyz'] = mIyz
+    prob['rna_offset'] = mrho
     # -----------
 
     # --- wind ---
@@ -692,14 +808,14 @@ if __name__ == '__main__':
     # ---------------
 
     # # --- loading case 1: max Thrust ---
-    prob['wind.Uref'] = wind_Uref1
+    prob['Uref'] = wind_Uref1
 
-    prob['tower.Fx'] = Fx1
-    prob['tower.Fy'] = Fy1
-    prob['tower.Fz'] = Fz1
-    prob['tower.Mxx'] = Mxx1
-    prob['tower.Myy'] = Myy1
-    prob['tower.Mzz'] = Mzz1
+    prob['Fx'] = Fx1
+    prob['Fy'] = Fy1
+    prob['Fz'] = Fz1
+    prob['Mxx'] = Mxx1
+    prob['Myy'] = Myy1
+    prob['Mzz'] = Mzz1
     # # ---------------
 
     # --- safety factors ---
@@ -710,6 +826,17 @@ if __name__ == '__main__':
     prob['gamma_fatigue'] = gamma_fatigue
     # ---------------
 
+    prob['DC'] = 80.0
+    prob['shear'] = True
+    prob['geom'] = False
+    prob['dx'] = 5.0
+    prob['nM'] = 2
+    prob['Mmethod'] = 1
+    prob['lump'] = 0
+    prob['tol'] = 1e-9
+    prob['shift'] = 0.0
+
+    
     # --- fatigue ---
     prob['z_DEL'] = z_DEL
     prob['M_DEL'] = M_DEL
@@ -718,31 +845,31 @@ if __name__ == '__main__':
     # ---------------
 
     # --- constraints ---
-    prob['gc.min_d_to_t'] = min_d_to_t
-    prob['gc.min_taper'] = min_taper
+    prob['min_d_to_t'] = min_d_to_t
+    prob['min_taper'] = min_taper
     # ---------------
 
 
     # # --- run ---
     prob.run()
 
-    z = prob['z_full']
+    z = prob['geometry.z_full']
 
-    print 'mass (kg) =', prob['mass']
-    print 'cg (m) =', prob['center_of_mass']
+    print 'mass (kg) =', prob['tm.mass']
+    print 'cg (m) =', prob['tm.center_of_mass']
     print 'f1 (Hz) =', prob['tower.f1']
     print 'top_deflection1 (m) =', prob['tower.top_deflection']
     print 'weldability =', prob['gc.weldability']
     print 'manufacturability =', prob['gc.manufacturability']
     print 'stress1 =', prob['tower.stress']
     print 'zs=', z
-    print 'ds=', prob['d_full']
-    print 'ts=', prob['t_full']
+    print 'ds=', prob['geometry.d_full']
+    print 'ts=', prob['geometry.t_full']
     print 'GL buckling =', prob['tower.global_buckling']
     print 'Shell buckling =', prob['tower.shell_buckling']
     print 'damage =', prob['tower.damage']
 
-    print 'wind: ', prob['wind.Uref']
+    print 'wind: ', prob['Uref']
 
     stress1 = np.copy( prob['tower.stress'] )
     shellBuckle1 = np.copy( prob['tower.shell_buckling'] )
@@ -752,27 +879,27 @@ if __name__ == '__main__':
 
 
     # # --- loading case 2: max Wind Speed ---
-    prob['wind.Uref'] = wind_Uref2
+    prob['Uref'] = wind_Uref2
 
-    prob['tower.Fx'] = Fx2
-    prob['tower.Fy'] = Fy2
-    prob['tower.Fz'] = Fz2
-    prob['tower.Mxx'] = Mxx2
-    prob['tower.Myy'] = Myy2
-    prob['tower.Mzz'] = Mzz2
+    prob['Fx'] = Fx2
+    prob['Fy'] = Fy2
+    prob['Fz'] = Fz2
+    prob['Mxx'] = Mxx2
+    prob['Myy'] = Myy2
+    prob['Mzz'] = Mzz2
 
     prob.run()
 
-    print 'mass (kg) =', prob['mass']
-    print 'cg (m) =', prob['center_of_mass']
-    print 'f2 (Hz) =', prob['tower.f2']
+    print 'mass (kg) =', prob['tm.mass']
+    print 'cg (m) =', prob['tm.center_of_mass']
+    print 'f2 (Hz) =', prob['tower.f1']
     print 'top_deflection1 (m) =', prob['tower.top_deflection']
     print 'weldability =', prob['gc.weldability']
     print 'manufacturability =', prob['gc.manufacturability']
-    print 'stress =', prob['tower.stress']
+    print 'stress1 =', prob['tower.stress']
     print 'zs=', z
-    print 'ds=', prob['d_full']
-    print 'ts=', prob['t_full']
+    print 'ds=', prob['geometry.d_full']
+    print 'ts=', prob['geometry.t_full']
     print 'GL buckling =', prob['tower.global_buckling']
     print 'Shell buckling =', prob['tower.shell_buckling']
     print 'damage =', prob['tower.damage']
