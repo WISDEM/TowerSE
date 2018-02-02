@@ -448,7 +448,7 @@ class TowerFrame3DD(Component):
 
 class TowerSE(Group):
 
-    def __init__(self, nPoints, nFull, nDEL, wind=''):
+    def __init__(self, nLC, nPoints, nFull, nDEL, wind=''):
 
         super(TowerSE, self).__init__()
 
@@ -462,28 +462,11 @@ class TowerSE(Group):
         self.add('tower_z_DEL', IndepVarComp('tower_z_DEL', np.zeros(nDEL), pass_by_obj=True), promotes=['*'])
         self.add('tower_force_discretization', IndepVarComp('tower_force_discretization', 5.0), promotes=['*'])
         
-        # All the components
+
+        # All the static components
         self.add('geometry', TowerDiscretization(nPoints, nFull), promotes=['hub_height'])
         self.add('tm', TowerMass(nPoints), promotes=['rho','tower_mass','tower_center_of_mass'])
-
-        if wind.lower() == 'powerwind':
-            self.add('wind', PowerWind(nFull), promotes=['Uref','zref','shearExp','z0','betaWind'])
-        elif wind.lower() == 'logwind':
-            self.add('wind', LogWind(nFull), promotes=['Uref','zref','z_roughness','z0','betaWind'])
-        else:
-            raise ValueError('Unknown wind type, '+wind)
-
-        # Add in all Components
-        self.add('wave', WaveBase(nFull), promotes=['z_floor'])
-        self.add('windLoads', TowerWindDrag(nFull), promotes=['cd_usr'])
-        self.add('waveLoads', TowerWaveDrag(nFull), promotes=['U0','A0','beta0','cm'])
-        self.add('distLoads', AeroHydroLoads(nFull), promotes=['yaw'])
         self.add('props', CylindricalShellProperties(nFull))
-        self.add('tower', TowerFrame3DD(nFull, nDEL), promotes=['DC','E','G','sigma_y','rna_F','rna_M','mIxx','mIyy','mIzz','mIxy','mIyz','mIxz',
-                                                                'tol','Mmethod','geom','lump','shear','m_SN','nM','shift','life',
-                                                                'gamma_b','gamma_f','gamma_fatigue','gamma_m','gamma_n',
-                                                                'shell_buckling','global_buckling','stress','damage','top_deflection','f1','f2',
-                                                                'turbine_Fx','turbine_Fy','turbine_Fz','turbine_Mx','turbine_My','turbine_Mz'])
         self.add('gc', Util.GeometricConstraints(nPoints), promotes=['min_d_to_t','min_taper','manufacturability','weldability'])
         self.add('turb', TurbineMass(), promotes=['rna_mass', 'rna_offset'])
 
@@ -492,78 +475,105 @@ class TowerSE(Group):
         self.connect('tower_diameter', ['geometry.tower_diameter', 'tm.d_param', 'gc.d'])
         self.connect('tower_wall_thickness', ['geometry.tower_wall_thickness', 'tm.t_param', 'gc.t'])
         self.connect('tower_outfitting_factor', 'tm.outfitting_factor')
-        self.connect('tower_force_discretization', 'tower.dx')
-
-        self.connect('rho','tower.rho')
-        self.connect('rna_mass', 'tower.m')
-        self.connect('rna_offset', 'tower.mrho')
-        
+        self.connect('geometry.d_full', 'props.d')
+        self.connect('geometry.t_full', 'props.t')
         self.connect('geometry.z_param', 'tm.z_param')
         self.connect('geometry.z_param', 'turb.hubH', src_indices=[nPoints-1])
-        self.connect('geometry.z_full', ['wind.z', 'wave.z', 'windLoads.z', 'waveLoads.z', 'distLoads.z', 'tower.z'])
-        self.connect('geometry.d_full', ['windLoads.d', 'waveLoads.d', 'props.d', 'tower.d', 'tower.d'])
-        self.connect('geometry.t_full', ['props.t', 'tower.t'])
 
         self.connect('tower_mass', 'turb.tower_mass')
         self.connect('tower_center_of_mass', 'turb.tower_center_of_mass')
+
         
-        # connections to wind1
-        self.connect('z0', 'wave.z_surface')
-        self.connect('z_floor', 'waveLoads.wlevel')
+        # Add in all Components that drive load cases
+        # Note multiple load cases have to be handled by replicating components and not groups/assemblies.
+        # Replicating Groups replicates the IndepVarComps which doesn't play nicely in OpenMDAO
+        for iLC in xrange(nLC):
+            lc = '' if nLC==1 else str(iLC+1)
+            
+            if wind.lower() == 'powerwind':
+                self.add('wind'+lc, PowerWind(nFull), promotes=['z0'])#, promotes=['Uref','zref','shearExp','z0','betaWind'])
+            elif wind.lower() == 'logwind':
+                self.add('wind'+lc, LogWind(nFull), promotes=['z0'])#, promotes=['Uref','zref','z_roughness','z0','betaWind'])
+            else:
+                raise ValueError('Unknown wind type, '+wind)
+
+            self.add('wave'+lc, WaveBase(nFull), promotes=['z_floor'])
+            self.add('windLoads'+lc, TowerWindDrag(nFull), promotes=['cd_usr'])
+            self.add('waveLoads'+lc, TowerWaveDrag(nFull))#, promotes=['U0','A0','beta0','cm'])
+            self.add('distLoads'+lc, AeroHydroLoads(nFull))#, promotes=['yaw'])
+            self.add('tower'+lc, TowerFrame3DD(nFull, nDEL), promotes=['DC','E','G','sigma_y','mIxx','mIyy','mIzz','mIxy','mIyz','mIxz',
+                                                                    'tol','Mmethod','geom','lump','shear','m_SN','nM','shift','life',
+                                                                    'gamma_b','gamma_f','gamma_fatigue','gamma_m','gamma_n'])
+            #'shell_buckling','global_buckling','stress','damage','top_deflection','f1','f2',
+            #'turbine_Fx','turbine_Fy','turbine_Fz','turbine_Mx','turbine_My','turbine_Mz'])
+            
+            self.connect('geometry.z_full', ['wind'+lc+'.z', 'wave'+lc+'.z', 'windLoads'+lc+'.z', 'waveLoads'+lc+'.z', 'distLoads'+lc+'.z', 'tower'+lc+'.z'])
+            self.connect('geometry.d_full', ['windLoads'+lc+'.d', 'waveLoads'+lc+'.d', 'tower'+lc+'.d'])
+            self.connect('tower_force_discretization', 'tower'+lc+'.dx')
+
+            self.connect('rho','tower'+lc+'.rho')
+            self.connect('rna_mass', 'tower'+lc+'.m')
+            self.connect('rna_offset', 'tower'+lc+'.mrho')
         
-        # connections to windLoads1
-        self.connect('wind.U', 'windLoads.U')
-        self.connect('wind.beta', 'windLoads.beta')
-        self.connect('cd_usr', 'waveLoads.cd_usr')
-
-        # connections to waveLoads1
-        self.connect('wave.U', 'waveLoads.U')
-        self.connect('wave.A', 'waveLoads.A')
-        self.connect('wave.beta', 'waveLoads.beta')
-
-        # connections to distLoads1
-        self.connect('windLoads.windLoads:Px', 'distLoads.windLoads:Px')
-        self.connect('windLoads.windLoads:Py', 'distLoads.windLoads:Py')
-        self.connect('windLoads.windLoads:Pz', 'distLoads.windLoads:Pz')
-        self.connect('windLoads.windLoads:qdyn', 'distLoads.windLoads:qdyn')
-        self.connect('windLoads.windLoads:beta', 'distLoads.windLoads:beta')
-        self.connect('windLoads.windLoads:Px0', 'distLoads.windLoads:Px0')
-        self.connect('windLoads.windLoads:Py0', 'distLoads.windLoads:Py0')
-        self.connect('windLoads.windLoads:Pz0', 'distLoads.windLoads:Pz0')
-        self.connect('windLoads.windLoads:qdyn0', 'distLoads.windLoads:qdyn0')
-        self.connect('windLoads.windLoads:beta0', 'distLoads.windLoads:beta0')
-        self.connect('windLoads.windLoads:z', 'distLoads.windLoads:z')
-        self.connect('windLoads.windLoads:d', 'distLoads.windLoads:d')
-
-        self.connect('waveLoads.waveLoads:Px', 'distLoads.waveLoads:Px')
-        self.connect('waveLoads.waveLoads:Py', 'distLoads.waveLoads:Py')
-        self.connect('waveLoads.waveLoads:Pz', 'distLoads.waveLoads:Pz')
-        self.connect('waveLoads.waveLoads:qdyn', 'distLoads.waveLoads:qdyn')
-        self.connect('waveLoads.waveLoads:beta', 'distLoads.waveLoads:beta')
-        self.connect('waveLoads.waveLoads:Px0', 'distLoads.waveLoads:Px0')
-        self.connect('waveLoads.waveLoads:Py0', 'distLoads.waveLoads:Py0')
-        self.connect('waveLoads.waveLoads:Pz0', 'distLoads.waveLoads:Pz0')
-        self.connect('waveLoads.waveLoads:qdyn0', 'distLoads.waveLoads:qdyn0')
-        self.connect('waveLoads.waveLoads:beta0', 'distLoads.waveLoads:beta0')
-        self.connect('waveLoads.waveLoads:z', 'distLoads.waveLoads:z')
-        self.connect('waveLoads.waveLoads:d', 'distLoads.waveLoads:d')
-
-        # Tower connections
-        self.connect('tower_buckling_length', 'tower.L_reinforced')
-        self.connect('tower_M_DEL', 'tower.M_DEL')
-        self.connect('tower_z_DEL', 'tower.z_DEL')
-
-        self.connect('props.Az', 'tower.Az')
-        self.connect('props.Asx', 'tower.Asx')
-        self.connect('props.Asy', 'tower.Asy')
-        self.connect('props.Jz', 'tower.Jz')
-        self.connect('props.Ixx', 'tower.Ixx')
-        self.connect('props.Iyy', 'tower.Iyy')
+            self.connect('geometry.t_full', 'tower'+lc+'.t')
         
-        self.connect('distLoads.Px',   'tower.Px')
-        self.connect('distLoads.Py',   'tower.Py')
-        self.connect('distLoads.Pz',   'tower.Pz')
-        self.connect('distLoads.qdyn', 'tower.qdyn')
+            # connections to wind1
+            self.connect('z0', 'wave'+lc+'.z_surface')
+            self.connect('z_floor', 'waveLoads'+lc+'.wlevel')
+
+            # connections to windLoads1
+            self.connect('wind'+lc+'.U', 'windLoads'+lc+'.U')
+            self.connect('wind'+lc+'.beta', 'windLoads'+lc+'.beta')
+            self.connect('cd_usr', 'waveLoads'+lc+'.cd_usr')
+
+            # connections to waveLoads1
+            self.connect('wave'+lc+'.U', 'waveLoads'+lc+'.U')
+            self.connect('wave'+lc+'.A', 'waveLoads'+lc+'.A')
+            self.connect('wave'+lc+'.beta', 'waveLoads'+lc+'.beta')
+
+            # connections to distLoads1
+            self.connect('windLoads'+lc+'.windLoads:Px', 'distLoads'+lc+'.windLoads:Px')
+            self.connect('windLoads'+lc+'.windLoads:Py', 'distLoads'+lc+'.windLoads:Py')
+            self.connect('windLoads'+lc+'.windLoads:Pz', 'distLoads'+lc+'.windLoads:Pz')
+            self.connect('windLoads'+lc+'.windLoads:qdyn', 'distLoads'+lc+'.windLoads:qdyn')
+            self.connect('windLoads'+lc+'.windLoads:beta', 'distLoads'+lc+'.windLoads:beta')
+            self.connect('windLoads'+lc+'.windLoads:Px0', 'distLoads'+lc+'.windLoads:Px0')
+            self.connect('windLoads'+lc+'.windLoads:Py0', 'distLoads'+lc+'.windLoads:Py0')
+            self.connect('windLoads'+lc+'.windLoads:Pz0', 'distLoads'+lc+'.windLoads:Pz0')
+            self.connect('windLoads'+lc+'.windLoads:qdyn0', 'distLoads'+lc+'.windLoads:qdyn0')
+            self.connect('windLoads'+lc+'.windLoads:beta0', 'distLoads'+lc+'.windLoads:beta0')
+            self.connect('windLoads'+lc+'.windLoads:z', 'distLoads'+lc+'.windLoads:z')
+            self.connect('windLoads'+lc+'.windLoads:d', 'distLoads'+lc+'.windLoads:d')
+
+            self.connect('waveLoads'+lc+'.waveLoads:Px', 'distLoads'+lc+'.waveLoads:Px')
+            self.connect('waveLoads'+lc+'.waveLoads:Py', 'distLoads'+lc+'.waveLoads:Py')
+            self.connect('waveLoads'+lc+'.waveLoads:Pz', 'distLoads'+lc+'.waveLoads:Pz')
+            self.connect('waveLoads'+lc+'.waveLoads:qdyn', 'distLoads'+lc+'.waveLoads:qdyn')
+            self.connect('waveLoads'+lc+'.waveLoads:beta', 'distLoads'+lc+'.waveLoads:beta')
+            self.connect('waveLoads'+lc+'.waveLoads:Px0', 'distLoads'+lc+'.waveLoads:Px0')
+            self.connect('waveLoads'+lc+'.waveLoads:Py0', 'distLoads'+lc+'.waveLoads:Py0')
+            self.connect('waveLoads'+lc+'.waveLoads:Pz0', 'distLoads'+lc+'.waveLoads:Pz0')
+            self.connect('waveLoads'+lc+'.waveLoads:qdyn0', 'distLoads'+lc+'.waveLoads:qdyn0')
+            self.connect('waveLoads'+lc+'.waveLoads:beta0', 'distLoads'+lc+'.waveLoads:beta0')
+            self.connect('waveLoads'+lc+'.waveLoads:z', 'distLoads'+lc+'.waveLoads:z')
+            self.connect('waveLoads'+lc+'.waveLoads:d', 'distLoads'+lc+'.waveLoads:d')
+
+            # Tower connections
+            self.connect('tower_buckling_length', 'tower'+lc+'.L_reinforced')
+            self.connect('tower_M_DEL', 'tower'+lc+'.M_DEL')
+            self.connect('tower_z_DEL', 'tower'+lc+'.z_DEL')
+
+            self.connect('props.Az', 'tower'+lc+'.Az')
+            self.connect('props.Asx', 'tower'+lc+'.Asx')
+            self.connect('props.Asy', 'tower'+lc+'.Asy')
+            self.connect('props.Jz', 'tower'+lc+'.Jz')
+            self.connect('props.Ixx', 'tower'+lc+'.Ixx')
+            self.connect('props.Iyy', 'tower'+lc+'.Iyy')
+
+            self.connect('distLoads'+lc+'.Px',   'tower'+lc+'.Px')
+            self.connect('distLoads'+lc+'.Py',   'tower'+lc+'.Py')
+            self.connect('distLoads'+lc+'.Pz',   'tower'+lc+'.Pz')
+            self.connect('distLoads'+lc+'.qdyn', 'tower'+lc+'.qdyn')
 
         # Derivatives
         self.deriv_options['type'] = 'fd'
@@ -661,12 +671,13 @@ if __name__ == '__main__':
     nPoints = len(d_param)
     nFull = n
     wind = 'PowerWind'
-
-    prob = Problem(root=TowerSE(nPoints, nFull, nDEL, wind=wind))
+    nLC = 2
+    
+    prob = Problem(root=TowerSE(nLC, nPoints, nFull, nDEL, wind=wind))
     prob.setup()
 
     if wind=='PowerWind':
-        prob['shearExp'] = shearExp
+        prob['wind1.shearExp'] = prob['wind2.shearExp'] = shearExp
 
     # assign values to params
 
@@ -676,7 +687,7 @@ if __name__ == '__main__':
     prob['tower_wall_thickness'] = t_param
     prob['tower_buckling_length'] = L_reinforced
     prob['tower_outfitting_factor'] = Koutfitting
-    prob['yaw'] = yaw
+    prob['distLoads1.yaw'] = prob['distLoads2.yaw'] = yaw
     
     # --- material props ---
     prob['E'] = E
@@ -696,21 +707,14 @@ if __name__ == '__main__':
     # -----------
 
     # --- wind & wave ---
-    prob['zref'] = wind_zref
+    prob['wind1.zref'] = prob['wind2.zref'] = wind_zref
     prob['z0'] = wind_z0
-    prob['windLoads.rho'] = 1.225
-    prob['windLoads.mu'] = 1.7934e-5
-    prob['waveLoads.rho'] = 1025.0
-    prob['waveLoads.mu'] = 1.3351e-3
-    prob['U0'] = prob['A0'] = prob['beta0'] = 0.0
+    prob['windLoads1.rho'] = prob['windLoads2.rho'] = 1.225
+    prob['windLoads1.mu'] = prob['windLoads2.mu'] = 1.7934e-5
+    prob['waveLoads1.rho'] = prob['waveLoads2.rho'] = 1025.0
+    prob['waveLoads1.mu'] = prob['waveLoads2.mu'] = 1.3351e-3
+    prob['waveLoads1.U0'] = prob['waveLoads1.A0'] = prob['waveLoads1.beta0'] = prob['waveLoads2.U0'] = prob['waveLoads2.A0'] = prob['waveLoads2.beta0'] = 0.0
     # ---------------
-
-    # # --- loading case 1: max Thrust ---
-    prob['Uref'] = wind_Uref1
-
-    prob['rna_F'] = np.array([Fx1, Fy1, Fz1])
-    prob['rna_M'] = np.array([Mxx1, Myy1, Mzz1])
-    # # ---------------
 
     # --- safety factors ---
     prob['gamma_f'] = gamma_f
@@ -744,62 +748,57 @@ if __name__ == '__main__':
     # ---------------
 
 
+    # # --- loading case 1: max Thrust ---
+    prob['wind1.Uref'] = wind_Uref1
+
+    prob['tower1.rna_F'] = np.array([Fx1, Fy1, Fz1])
+    prob['tower1.rna_M'] = np.array([Mxx1, Myy1, Mzz1])
+    # # ---------------
+
+
+    # # --- loading case 2: max Wind Speed ---
+    prob['wind2.Uref'] = wind_Uref2
+
+    prob['tower2.rna_F'] = np.array([Fx2, Fy2, Fz2])
+    prob['tower2.rna_M' ] = np.array([Mxx2, Myy2, Mzz2])
+
     # # --- run ---
     prob.run()
 
     z = prob['geometry.z_full']
 
-    print 'mass (kg) =', prob['tower_mass']
-    print 'cg (m) =', prob['tower_center_of_mass']
-    print 'f1 (Hz) =', prob['f1']
-    print 'top_deflection1 (m) =', prob['top_deflection']
-    print 'weldability =', prob['weldability']
-    print 'manufacturability =', prob['manufacturability']
-    print 'stress1 =', prob['stress']
     print 'zs=', z
     print 'ds=', prob['geometry.d_full']
     print 'ts=', prob['geometry.t_full']
-    print 'GL buckling =', prob['global_buckling']
-    print 'Shell buckling =', prob['shell_buckling']
-    print 'damage =', prob['damage']
-
-    print 'wind: ', prob['Uref']
-
-    stress1 = np.copy( prob['stress'] )
-    shellBuckle1 = np.copy( prob['shell_buckling'] )
-    globalBuckle1 = np.copy( prob['global_buckling'] )
-    damage1 = np.copy( prob['damage'] )
-
-
-
-    # # --- loading case 2: max Wind Speed ---
-    prob['Uref'] = wind_Uref2
-
-    prob['rna_F'] = np.array([Fx2, Fy2, Fz2])
-    prob['rna_M' ] = np.array([Mxx2, Myy2, Mzz2])
-
-    prob.run()
-
     print 'mass (kg) =', prob['tower_mass']
     print 'cg (m) =', prob['tower_center_of_mass']
-    print 'f2 (Hz) =', prob['f1']
-    print 'top_deflection1 (m) =', prob['top_deflection']
     print 'weldability =', prob['weldability']
     print 'manufacturability =', prob['manufacturability']
-    print 'stress1 =', prob['stress']
-    print 'zs=', z
-    print 'ds=', prob['geometry.d_full']
-    print 'ts=', prob['geometry.t_full']
-    print 'GL buckling =', prob['global_buckling']
-    print 'Shell buckling =', prob['shell_buckling']
-    print 'damage =', prob['damage']
+    print '\nwind: ', prob['wind1.Uref']
+    print 'f1 (Hz) =', prob['tower1.f1']
+    print 'top_deflection1 (m) =', prob['tower1.top_deflection']
+    print 'stress1 =', prob['tower1.stress']
+    print 'GL buckling =', prob['tower1.global_buckling']
+    print 'Shell buckling =', prob['tower1.shell_buckling']
+    print 'damage =', prob['tower1.damage']
+    print '\nwind: ', prob['wind2.Uref']
+    print 'f1 (Hz) =', prob['tower2.f1']
+    print 'top_deflection2 (m) =', prob['tower2.top_deflection']
+    print 'stress2 =', prob['tower2.stress']
+    print 'GL buckling =', prob['tower2.global_buckling']
+    print 'Shell buckling =', prob['tower2.shell_buckling']
+    print 'damage =', prob['tower2.damage']
 
-    print 'wind: ', prob['Uref']
 
-    stress2 = prob['stress']
-    shellBuckle2 = prob['shell_buckling']
-    globalBuckle2 = prob['global_buckling']
-    damage2 = prob['damage']
+    stress1 = np.copy( prob['tower1.stress'] )
+    shellBuckle1 = np.copy( prob['tower1.shell_buckling'] )
+    globalBuckle1 = np.copy( prob['tower1.global_buckling'] )
+    damage1 = np.copy( prob['tower1.damage'] )
+
+    stress2 = prob['tower2.stress']
+    shellBuckle2 = prob['tower2.shell_buckling']
+    globalBuckle2 = prob['tower2.global_buckling']
+    damage2 = prob['tower2.damage']
 
     
     import matplotlib.pyplot as plt
