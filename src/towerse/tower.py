@@ -55,6 +55,7 @@ class TowerDiscretization(Component):
         self.nFull = nFull
         
          # variables
+        self.add_param('hub_height', val=0.0, units='m', desc='diameter at tower base')
         self.add_param('tower_section_height', np.zeros(nPoints-1), units='m', desc='parameterized section heights along tower')
         self.add_param('tower_diameter', np.zeros(nPoints), units='m', desc='tower diameter at corresponding locations')
         self.add_param('tower_wall_thickness', np.zeros(nPoints), units='m', desc='shell thickness at corresponding locations')
@@ -64,8 +65,8 @@ class TowerDiscretization(Component):
         self.add_output('z_full', np.zeros(nFull), units='m', desc='locations along tower')
         self.add_output('d_full', np.zeros(nFull), units='m', desc='tower diameter at corresponding locations')
         self.add_output('t_full', np.zeros(nFull), units='m', desc='shell thickness at corresponding locations')
+        self.add_output('height_constraint', val=0.0, units='m', desc='diameter at tower base')
         # Convenience outputs for export to other modules
-        self.add_output('hub_height', val=0.0, units='m', desc='diameter at tower base')
         
         # Derivatives
         self.deriv_options['type'] = 'fd'
@@ -79,8 +80,8 @@ class TowerDiscretization(Component):
         unknowns['z_full']  = np.linspace(unknowns['z_param'][0], unknowns['z_param'][-1], self.nFull) 
         unknowns['d_full']  = np.interp(unknowns['z_full'], unknowns['z_param'], params['tower_diameter'])
         unknowns['t_full']  = np.interp(unknowns['z_full'], unknowns['z_param'], params['tower_wall_thickness'])
-        unknowns['hub_height'] = unknowns['z_param'][-1]
-
+        unknowns['height_constraint'] = params['hub_height'] - unknowns['z_param'][-1]
+        
         
 class TowerMass(Component):
 
@@ -478,7 +479,7 @@ class TowerSE(Group):
         self.connect('geometry.d_full', 'props.d')
         self.connect('geometry.t_full', 'props.t')
         self.connect('geometry.z_param', 'tm.z_param')
-        self.connect('geometry.z_param', 'turb.hubH', src_indices=[nPoints-1])
+        self.connect('hub_height', 'turb.hubH')
 
         self.connect('tower_mass', 'turb.tower_mass')
         self.connect('tower_center_of_mass', 'turb.tower_center_of_mass')
@@ -682,6 +683,7 @@ if __name__ == '__main__':
     # assign values to params
 
     # --- geometry ----
+    prob['hub_height'] = h_param.sum()
     prob['tower_section_height'] = h_param
     prob['tower_diameter'] = d_param
     prob['tower_wall_thickness'] = t_param
