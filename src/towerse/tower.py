@@ -500,7 +500,7 @@ class TowerSE(Group):
 
             self.add('wave'+lc, WaveBase(nFull), promotes=['z_floor'])
             self.add('windLoads'+lc, TowerWindDrag(nFull), promotes=['cd_usr'])
-            self.add('waveLoads'+lc, TowerWaveDrag(nFull))#, promotes=['U0','A0','beta0','cm'])
+            self.add('waveLoads'+lc, TowerWaveDrag(nFull), promotes=['cm'])#, promotes=['U0','A0','beta0','cm'])
             self.add('distLoads'+lc, AeroHydroLoads(nFull))#, promotes=['yaw'])
             self.add('tower'+lc, TowerFrame3DD(nFull, nDEL), promotes=['DC','E','G','sigma_y','mIxx','mIyy','mIzz','mIxy','mIyz','mIxz',
                                                                     'tol','Mmethod','geom','lump','shear','m_SN','nM','shift','life',
