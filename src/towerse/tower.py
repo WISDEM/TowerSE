@@ -171,12 +171,7 @@ class TowerFrame3DD(Component):
 
         # extra mass
         self.add_param('m', 0.0, units='kg', desc='added mass')
-        self.add_param('mIxx', 0.0, units='kg*m**2', desc='x mass moment of inertia about some point p')
-        self.add_param('mIyy', 0.0, units='kg*m**2', desc='y mass moment of inertia about some point p')
-        self.add_param('mIzz', 0.0, units='kg*m**2', desc='z mass moment of inertia about some point p')
-        self.add_param('mIxy', 0.0, units='kg*m**2', desc='xy mass moment of inertia about some point p')
-        self.add_param('mIxz', 0.0, units='kg*m**2', desc='xz mass moment of inertia about some point p')
-        self.add_param('mIyz', 0.0, units='kg*m**2', desc='yz mass moment of inertia about some point p')
+        self.add_param('mI', np.zeros((6,)), units='kg*m**2', desc='mass moment of inertia about some point p [xx yy zz xy xz yz]')
         self.add_param('mrho', np.zeros((3,)), units='m', desc='xyz-location of p relative to node')
 
         # point loads
@@ -303,12 +298,12 @@ class TowerFrame3DD(Component):
         # extra node inertia data
         N = np.array([ node[-1] ])
         m = np.array([ params['m'] ])
-        mIxx = np.array([ params['mIxx'] ])
-        mIyy = np.array([ params['mIyy'] ])
-        mIzz = np.array([ params['mIzz'] ])
-        mIxy = np.array([ params['mIxy'] ])
-        mIyz = np.array([ params['mIyz'] ])
-        mIxz = np.array([ params['mIxz'] ])
+        mIxx = np.array([ params['mI'][0] ])
+        mIyy = np.array([ params['mI'][1] ])
+        mIzz = np.array([ params['mI'][2] ])
+        mIxy = np.array([ params['mI'][3] ])
+        mIxz = np.array([ params['mI'][4] ])
+        mIyz = np.array([ params['mI'][5] ])
         mrhox = np.array([ params['mrho'][0] ])
         mrhoy = np.array([ params['mrho'][1] ])
         mrhoz = np.array([ params['mrho'][2] ])
@@ -502,7 +497,7 @@ class TowerSE(Group):
             self.add('windLoads'+lc, TowerWindDrag(nFull), promotes=['cd_usr'])
             self.add('waveLoads'+lc, TowerWaveDrag(nFull), promotes=['cm'])#, promotes=['U0','A0','beta0','cm'])
             self.add('distLoads'+lc, AeroHydroLoads(nFull))#, promotes=['yaw'])
-            self.add('tower'+lc, TowerFrame3DD(nFull, nDEL), promotes=['DC','E','G','sigma_y','mIxx','mIyy','mIzz','mIxy','mIyz','mIxz',
+            self.add('tower'+lc, TowerFrame3DD(nFull, nDEL), promotes=['DC','E','G','sigma_y','mI',
                                                                     'tol','Mmethod','geom','lump','shear','m_SN','nM','shift','life',
                                                                     'gamma_b','gamma_f','gamma_fatigue','gamma_m','gamma_n'])
             #'shell_buckling','global_buckling','stress','damage','top_deflection','f1','f2',
@@ -606,12 +601,13 @@ if __name__ == '__main__':
 
     # --- extra mass ----
     m = np.array([285598.8])
-    mIxx = np.array([1.14930678e+08])
-    mIyy = np.array([2.20354030e+07])
-    mIzz = np.array([1.87597425e+07])
-    mIxy = np.array([0.00000000e+00])
-    mIxz = np.array([5.03710467e+05])
-    mIyz = np.array([0.00000000e+00])
+    mIxx = 1.14930678e+08
+    mIyy = 2.20354030e+07
+    mIzz = 1.87597425e+07
+    mIxy = 0.0
+    mIxz = 5.03710467e+05
+    mIyz = 0.0
+    mI = np.array([mIxx, mIyy, mIzz, mIxy, mIxz, mIyz])
     mrho = np.array([-1.13197635, 0.0, 0.50875268])
     # -----------
 
@@ -699,12 +695,7 @@ if __name__ == '__main__':
 
     # --- extra mass ----
     prob['rna_mass'] = m
-    prob['mIxx'] = mIxx
-    prob['mIyy'] = mIyy
-    prob['mIzz'] = mIzz
-    prob['mIxy'] = mIxy
-    prob['mIxz'] = mIxz
-    prob['mIyz'] = mIyz
+    prob['mI'] = mI
     prob['rna_offset'] = mrho
     # -----------
 
