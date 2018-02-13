@@ -20,7 +20,7 @@ HISTORY:  2012 created
 import numpy as np
 from openmdao.api import Component, Group, Problem, IndepVarComp
 
-from commonse.WindWaveDrag import AeroHydroLoads, TowerWindDrag, TowerWaveDrag
+from commonse.WindWaveDrag import AeroHydroLoads, CylinderWindDrag, CylinderWaveDrag
 
 from commonse.environment import WindBase, WaveBase, SoilBase, PowerWind, LogWind
 from commonse.tube import CylindricalShellProperties
@@ -59,7 +59,7 @@ class TowerMass(Component):
     def __init__(self, nPoints):
         super(TowerMass, self).__init__()
         
-        self.add_param('cylinder_mass', val=0.0, units='kg', desc='Total cylinder mass')
+        self.add_param('cylinder_mass', val=np.zeros(nPoints-1), units='kg', desc='Total cylinder mass')
         self.add_param('cylinder_center_of_mass', val=0.0, units='m', desc='z-position of center of mass of cylinder')
         self.add_param('cylinder_section_center_of_mass', val=np.zeros(nPoints-1), units='m', desc='z position of center of mass of each can in the cylinder')
         self.add_param('cylinder_I_base', np.zeros((6,)), units='kg*m**2', desc='mass moment of inertia of cylinder about base [xx yy zz xy xz yz]')
@@ -70,7 +70,7 @@ class TowerMass(Component):
         self.add_output('tower_I_base', np.zeros((6,)), units='kg*m**2', desc='mass moment of inertia of tower about base [xx yy zz xy xz yz]')
         
     def solve_nonlinear(self, params, unknowns, resids):
-        unknowns['tower_mass']           = params['cylinder_mass']
+        unknowns['tower_mass']           = params['cylinder_mass'].sum()
         unknowns['tower_center_of_mass'] = params['cylinder_center_of_mass']
         unknowns['tower_section_center_of_mass'] = params['cylinder_section_center_of_mass']
         unknowns['tower_I_base']         = params['cylinder_I_base']
@@ -81,7 +81,7 @@ class TowerMass(Component):
         zero6 = np.zeros(6)
 
         J = {}
-        J['tower_mass','cylinder_mass'] = 1.0
+        J['tower_mass','cylinder_mass'] = np.ones(len(unknowns['cylinder_mass']))
         J['tower_mass','cylinder_center_of_mass'] = 0.0
         J['tower_mass','cylinder_section_center_of_mass'] = zeroPts
         J['tower_mass','cylinder_I_base'] = zero6
@@ -364,20 +364,20 @@ class TowerSE(Group):
         self.add('geometry', CylinderDiscretization(nPoints, nFull))
         self.add('tgeometry', TowerDiscretization(), promotes=['hub_height'])
         
-        self.add('cm', CylinderMass(nPoints), promotes=['rho'])
-        self.add('tm', TowerMass(nPoints), promotes=['tower_mass','tower_center_of_mass','tower_I_base'])
+        self.add('cm', CylinderMass(nFull), promotes=['material_density'])
+        self.add('tm', TowerMass(nFull), promotes=['tower_mass','tower_center_of_mass','tower_I_base'])
         self.add('props', CylindricalShellProperties(nFull))
         self.add('gc', Util.GeometricConstraints(nPoints), promotes=['min_d_to_t','min_taper','manufacturability','weldability'])
         self.add('turb', TurbineMass(), promotes=['rna_mass', 'rna_offset', 'rna_I_TT'])
 
         # Connections for geometry and mass
         self.connect('tower_section_height', 'geometry.section_height')
-        self.connect('tower_diameter', ['geometry.diameter', 'cm.d_param', 'gc.d'])
-        self.connect('tower_wall_thickness', ['geometry.wall_thickness', 'cm.t_param', 'gc.t'])
+        self.connect('tower_diameter', ['geometry.diameter', 'gc.d'])
+        self.connect('tower_wall_thickness', ['geometry.wall_thickness', 'gc.t'])
         self.connect('tower_outfitting_factor', 'cm.outfitting_factor')
-        self.connect('geometry.d_full', 'props.d')
-        self.connect('geometry.t_full', 'props.t')
-        self.connect('geometry.z_param', 'cm.z_param')
+        self.connect('geometry.z_full', 'cm.z_full')
+        self.connect('geometry.d_full', ['cm.d_full','props.d'])
+        self.connect('geometry.t_full', ['cm.t_full','props.t'])
         self.connect('geometry.z_param', 'tgeometry.z_end', src_indices=[nPoints-1])
         self.connect('hub_height', 'turb.hubH')
 
@@ -388,7 +388,6 @@ class TowerSE(Group):
         self.connect('tower_mass', 'turb.tower_mass')
         self.connect('tower_center_of_mass', 'turb.tower_center_of_mass')
         self.connect('tower_I_base', 'turb.tower_I_base')
-
         
         # Add in all Components that drive load cases
         # Note multiple load cases have to be handled by replicating components and not groups/assemblies.
@@ -397,19 +396,19 @@ class TowerSE(Group):
             lc = '' if nLC==1 else str(iLC+1)
             
             if wind.lower() == 'powerwind':
-                self.add('wind'+lc, PowerWind(nFull), promotes=['z0'])#, promotes=['Uref','zref','shearExp','z0','betaWind'])
+                self.add('wind'+lc, PowerWind(nFull), promotes=['z0'])
             elif wind.lower() == 'logwind':
-                self.add('wind'+lc, LogWind(nFull), promotes=['z0'])#, promotes=['Uref','zref','z_roughness','z0','betaWind'])
+                self.add('wind'+lc, LogWind(nFull), promotes=['z0'])
             else:
                 raise ValueError('Unknown wind type, '+wind)
 
             self.add('wave'+lc, WaveBase(nFull), promotes=['z_floor'])
-            self.add('windLoads'+lc, TowerWindDrag(nFull), promotes=['cd_usr'])
-            self.add('waveLoads'+lc, TowerWaveDrag(nFull), promotes=['cm'])#, promotes=['U0','A0','beta0','cm'])
+            self.add('windLoads'+lc, CylinderWindDrag(nFull), promotes=['cd_usr'])
+            self.add('waveLoads'+lc, CylinderWaveDrag(nFull), promotes=['cm','cd_usr'])
             self.add('distLoads'+lc, AeroHydroLoads(nFull))#, promotes=['yaw'])
 
             self.add('pre'+lc, TowerPreFrame(nFull))
-            self.add('tower'+lc, CylinderFrame3DD(nFull, 1, 1, 1), promotes=['rho','E','G','tol','Mmethod','geom','lump','shear',
+            self.add('tower'+lc, CylinderFrame3DD(nFull, 1, 1, 1), promotes=['E','G','tol','Mmethod','geom','lump','shear',
                                                                              'nM','shift'])
             self.add('post'+lc, TowerPostFrame(nFull, nDEL), promotes=['E','sigma_y','DC','life','m_SN',
                                                                       'gamma_b','gamma_f','gamma_fatigue','gamma_m','gamma_n'])
@@ -421,6 +420,8 @@ class TowerSE(Group):
             self.connect('rna_offset', 'pre'+lc+'.mrho')
             self.connect('rna_I_TT', 'pre'+lc+'.mI')
         
+            self.connect('material_density', 'tower'+lc+'.rho')
+
             self.connect('pre'+lc+'.kidx', 'tower'+lc+'.kidx')
             self.connect('pre'+lc+'.kx', 'tower'+lc+'.kx')
             self.connect('pre'+lc+'.ky', 'tower'+lc+'.ky')
@@ -456,17 +457,16 @@ class TowerSE(Group):
         
             # connections to wind1
             self.connect('z0', 'wave'+lc+'.z_surface')
-            self.connect('z_floor', 'waveLoads'+lc+'.wlevel')
+            #self.connect('z_floor', 'waveLoads'+lc+'.wlevel')
 
             # connections to windLoads1
             self.connect('wind'+lc+'.U', 'windLoads'+lc+'.U')
-            self.connect('wind'+lc+'.beta', 'windLoads'+lc+'.beta')
-            self.connect('cd_usr', 'waveLoads'+lc+'.cd_usr')
+            #self.connect('wind'+lc+'.beta', 'windLoads'+lc+'.beta')
 
             # connections to waveLoads1
             self.connect('wave'+lc+'.U', 'waveLoads'+lc+'.U')
             self.connect('wave'+lc+'.A', 'waveLoads'+lc+'.A')
-            self.connect('wave'+lc+'.beta', 'waveLoads'+lc+'.beta')
+            #self.connect('wave'+lc+'.beta', 'waveLoads'+lc+'.beta')
 
             # connections to distLoads1
             self.connect('windLoads'+lc+'.windLoads:Px', 'distLoads'+lc+'.windLoads:Px')
@@ -474,11 +474,11 @@ class TowerSE(Group):
             self.connect('windLoads'+lc+'.windLoads:Pz', 'distLoads'+lc+'.windLoads:Pz')
             self.connect('windLoads'+lc+'.windLoads:qdyn', 'distLoads'+lc+'.windLoads:qdyn')
             self.connect('windLoads'+lc+'.windLoads:beta', 'distLoads'+lc+'.windLoads:beta')
-            self.connect('windLoads'+lc+'.windLoads:Px0', 'distLoads'+lc+'.windLoads:Px0')
-            self.connect('windLoads'+lc+'.windLoads:Py0', 'distLoads'+lc+'.windLoads:Py0')
-            self.connect('windLoads'+lc+'.windLoads:Pz0', 'distLoads'+lc+'.windLoads:Pz0')
-            self.connect('windLoads'+lc+'.windLoads:qdyn0', 'distLoads'+lc+'.windLoads:qdyn0')
-            self.connect('windLoads'+lc+'.windLoads:beta0', 'distLoads'+lc+'.windLoads:beta0')
+            #self.connect('windLoads'+lc+'.windLoads:Px0', 'distLoads'+lc+'.windLoads:Px0')
+            #self.connect('windLoads'+lc+'.windLoads:Py0', 'distLoads'+lc+'.windLoads:Py0')
+            #self.connect('windLoads'+lc+'.windLoads:Pz0', 'distLoads'+lc+'.windLoads:Pz0')
+            #self.connect('windLoads'+lc+'.windLoads:qdyn0', 'distLoads'+lc+'.windLoads:qdyn0')
+            #self.connect('windLoads'+lc+'.windLoads:beta0', 'distLoads'+lc+'.windLoads:beta0')
             self.connect('windLoads'+lc+'.windLoads:z', 'distLoads'+lc+'.windLoads:z')
             self.connect('windLoads'+lc+'.windLoads:d', 'distLoads'+lc+'.windLoads:d')
 
@@ -487,11 +487,11 @@ class TowerSE(Group):
             self.connect('waveLoads'+lc+'.waveLoads:Pz', 'distLoads'+lc+'.waveLoads:Pz')
             self.connect('waveLoads'+lc+'.waveLoads:qdyn', 'distLoads'+lc+'.waveLoads:qdyn')
             self.connect('waveLoads'+lc+'.waveLoads:beta', 'distLoads'+lc+'.waveLoads:beta')
-            self.connect('waveLoads'+lc+'.waveLoads:Px0', 'distLoads'+lc+'.waveLoads:Px0')
-            self.connect('waveLoads'+lc+'.waveLoads:Py0', 'distLoads'+lc+'.waveLoads:Py0')
-            self.connect('waveLoads'+lc+'.waveLoads:Pz0', 'distLoads'+lc+'.waveLoads:Pz0')
-            self.connect('waveLoads'+lc+'.waveLoads:qdyn0', 'distLoads'+lc+'.waveLoads:qdyn0')
-            self.connect('waveLoads'+lc+'.waveLoads:beta0', 'distLoads'+lc+'.waveLoads:beta0')
+            #self.connect('waveLoads'+lc+'.waveLoads:Px0', 'distLoads'+lc+'.waveLoads:Px0')
+            #self.connect('waveLoads'+lc+'.waveLoads:Py0', 'distLoads'+lc+'.waveLoads:Py0')
+            #self.connect('waveLoads'+lc+'.waveLoads:Pz0', 'distLoads'+lc+'.waveLoads:Pz0')
+            #self.connect('waveLoads'+lc+'.waveLoads:qdyn0', 'distLoads'+lc+'.waveLoads:qdyn0')
+            #self.connect('waveLoads'+lc+'.waveLoads:beta0', 'distLoads'+lc+'.waveLoads:beta0')
             self.connect('waveLoads'+lc+'.waveLoads:z', 'distLoads'+lc+'.waveLoads:z')
             self.connect('waveLoads'+lc+'.waveLoads:d', 'distLoads'+lc+'.waveLoads:d')
 
@@ -555,6 +555,7 @@ if __name__ == '__main__':
     wind_zref = 90.0
     wind_z0 = 0.0
     shearExp = 0.2
+    cd_usr = None
     # ---------------
 
     # two load cases.  TODO: use a case iterator
@@ -629,7 +630,7 @@ if __name__ == '__main__':
     # --- material props ---
     prob['E'] = E
     prob['G'] = G
-    prob['rho'] = rho
+    prob['material_density'] = rho
     prob['sigma_y'] = sigma_y
 
     # --- extra mass ----
@@ -641,11 +642,13 @@ if __name__ == '__main__':
     # --- wind & wave ---
     prob['wind1.zref'] = prob['wind2.zref'] = wind_zref
     prob['z0'] = wind_z0
+    prob['cd_usr'] = cd_usr
     prob['windLoads1.rho'] = prob['windLoads2.rho'] = 1.225
     prob['windLoads1.mu'] = prob['windLoads2.mu'] = 1.7934e-5
-    prob['waveLoads1.rho'] = prob['waveLoads2.rho'] = 1025.0
+    prob['wave1.rho'] = prob['wave2.rho'] = prob['waveLoads1.rho'] = prob['waveLoads2.rho'] = 1025.0
     prob['waveLoads1.mu'] = prob['waveLoads2.mu'] = 1.3351e-3
-    prob['waveLoads1.U0'] = prob['waveLoads1.A0'] = prob['waveLoads1.beta0'] = prob['waveLoads2.U0'] = prob['waveLoads2.A0'] = prob['waveLoads2.beta0'] = 0.0
+    prob['windLoads1.beta'] = prob['windLoads2.beta'] = prob['waveLoads1.beta'] = prob['waveLoads2.beta'] = 0.0
+    #prob['waveLoads1.U0'] = prob['waveLoads1.A0'] = prob['waveLoads1.beta0'] = prob['waveLoads2.U0'] = prob['waveLoads2.A0'] = prob['waveLoads2.beta0'] = 0.0
     # ---------------
 
     # --- safety factors ---
