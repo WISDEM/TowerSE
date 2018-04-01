@@ -43,7 +43,7 @@ class TowerDiscretization(Component):
         super(TowerDiscretization, self).__init__()
         self.add_param('hub_height', val=0.0, units='m', desc='diameter at tower base')
         self.add_param('z_end', val=0.0, units='m', desc='Last node point on tower')
-        self.add_output('height_constraint', val=0.0, units='m', desc='diameter at tower base')
+        self.add_output('height_constraint', val=0.0, units='m', desc='mismatch between tower height and desired hub_height')
 
     def solve_nonlinear(self, params, unknowns, resids):
         unknowns['height_constraint'] = params['hub_height'] - params['z_end']
@@ -354,7 +354,7 @@ class TowerLeanSE(Group):
 
         # All the static components
         self.add('geometry', CylinderDiscretization(nPoints, nFull), promotes=['*'])
-        self.add('tgeometry', TowerDiscretization(), promotes=['hub_height'])
+        self.add('tgeometry', TowerDiscretization(), promotes=['hub_height','height_constraint'])
         
         self.add('cm', CylinderMass(nFull), promotes=['material_density','z_full','d_full','t_full'])
         self.add('tm', TowerMass(nFull), promotes=['tower_mass','tower_center_of_mass','tower_I_base'])
