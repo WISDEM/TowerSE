@@ -344,6 +344,8 @@ class TowerLeanSE(Group):
 
     def __init__(self, nPoints, nFull):
         super(TowerLeanSE, self).__init__()
+
+        nRefine = (nFull-1)/(nPoints-1)
         
         # Independent variables that are unique to TowerSE
         self.add('tower_section_height', IndepVarComp('tower_section_height', np.zeros(nPoints-1)), promotes=['*'])
@@ -353,7 +355,7 @@ class TowerLeanSE(Group):
         self.add('tower_buckling_length', IndepVarComp('tower_buckling_length', 0.0), promotes=['*'])
 
         # All the static components
-        self.add('geometry', CylinderDiscretization(nPoints, nFull), promotes=['*'])
+        self.add('geometry', CylinderDiscretization(nPoints, nRefine), promotes=['*'])
         self.add('tgeometry', TowerDiscretization(), promotes=['hub_height','height_constraint'])
         
         self.add('cm', CylinderMass(nFull), promotes=['material_density','z_full','d_full','t_full'])
