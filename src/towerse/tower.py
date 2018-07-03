@@ -478,18 +478,18 @@ class TowerSE(Group):
             #self.connect('wave'+lc+'.beta', 'waveLoads'+lc+'.beta')
 
             # connections to distLoads1
-            self.connect('windLoads'+lc+'.windLoads:Px', 'distLoads'+lc+'.windLoads:Px')
-            self.connect('windLoads'+lc+'.windLoads:Py', 'distLoads'+lc+'.windLoads:Py')
-            self.connect('windLoads'+lc+'.windLoads:Pz', 'distLoads'+lc+'.windLoads:Pz')
-            self.connect('windLoads'+lc+'.windLoads:qdyn', 'distLoads'+lc+'.windLoads:qdyn')
-            self.connect('windLoads'+lc+'.windLoads:beta', 'distLoads'+lc+'.windLoads:beta')
-            #self.connect('windLoads'+lc+'.windLoads:Px0', 'distLoads'+lc+'.windLoads:Px0')
-            #self.connect('windLoads'+lc+'.windLoads:Py0', 'distLoads'+lc+'.windLoads:Py0')
-            #self.connect('windLoads'+lc+'.windLoads:Pz0', 'distLoads'+lc+'.windLoads:Pz0')
-            #self.connect('windLoads'+lc+'.windLoads:qdyn0', 'distLoads'+lc+'.windLoads:qdyn0')
-            #self.connect('windLoads'+lc+'.windLoads:beta0', 'distLoads'+lc+'.windLoads:beta0')
-            self.connect('windLoads'+lc+'.windLoads:z', 'distLoads'+lc+'.windLoads:z')
-            self.connect('windLoads'+lc+'.windLoads:d', 'distLoads'+lc+'.windLoads:d')
+            self.connect('windLoads'+lc+'.windLoads_Px', 'distLoads'+lc+'.windLoads_Px')
+            self.connect('windLoads'+lc+'.windLoads_Py', 'distLoads'+lc+'.windLoads_Py')
+            self.connect('windLoads'+lc+'.windLoads_Pz', 'distLoads'+lc+'.windLoads_Pz')
+            self.connect('windLoads'+lc+'.windLoads_qdyn', 'distLoads'+lc+'.windLoads_qdyn')
+            self.connect('windLoads'+lc+'.windLoads_beta', 'distLoads'+lc+'.windLoads_beta')
+            #self.connect('windLoads'+lc+'.windLoads_Px0', 'distLoads'+lc+'.windLoads_Px0')
+            #self.connect('windLoads'+lc+'.windLoads_Py0', 'distLoads'+lc+'.windLoads_Py0')
+            #self.connect('windLoads'+lc+'.windLoads_Pz0', 'distLoads'+lc+'.windLoads_Pz0')
+            #self.connect('windLoads'+lc+'.windLoads_qdyn0', 'distLoads'+lc+'.windLoads_qdyn0')
+            #self.connect('windLoads'+lc+'.windLoads_beta0', 'distLoads'+lc+'.windLoads_beta0')
+            self.connect('windLoads'+lc+'.windLoads_z', 'distLoads'+lc+'.windLoads_z')
+            self.connect('windLoads'+lc+'.windLoads_d', 'distLoads'+lc+'.windLoads_d')
 
             self.connect('waveLoads'+lc+'.waveLoads:Px', 'distLoads'+lc+'.waveLoads:Px')
             self.connect('waveLoads'+lc+'.waveLoads:Py', 'distLoads'+lc+'.waveLoads:Py')
@@ -541,7 +541,7 @@ if __name__ == '__main__':
     theta_stress = 0.0
     yaw = 0.0
     Koutfitting = 1.07
-    
+
     # --- material props ---
     E = 210e9
     G = 80.8e9
