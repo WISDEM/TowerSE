@@ -360,7 +360,7 @@ class TowerLeanSE(Group):
         
         self.add('cm', CylinderMass(nFull), promotes=['material_density','z_full','d_full','t_full'])
         self.add('tm', TowerMass(nFull), promotes=['tower_mass','tower_center_of_mass','tower_I_base'])
-        self.add('gc', Util.GeometricConstraints(nPoints), promotes=['min_d_to_t','min_taper','manufacturability','weldability'])
+        self.add('gc', Util.GeometricConstraints(nPoints), promotes=['min_d_to_t','max_taper','manufacturability','weldability'])
         self.add('turb', TurbineMass(), promotes=['turbine_mass','rna_mass', 'rna_cg', 'rna_I'])
 
         # Connections for geometry and mass
@@ -608,7 +608,7 @@ if __name__ == '__main__':
 
     # --- constraints ---
     min_d_to_t = 120.0
-    min_taper = 0.4
+    max_taper = 0.2
     # ---------------
 
     # # V_max = 80.0  # tip speed
@@ -689,7 +689,7 @@ if __name__ == '__main__':
 
     # --- constraints ---
     prob['min_d_to_t'] = min_d_to_t
-    prob['min_taper'] = min_taper
+    prob['max_taper'] = max_taper
     # ---------------
 
 
