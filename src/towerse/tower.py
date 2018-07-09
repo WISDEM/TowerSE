@@ -537,6 +537,7 @@ if __name__ == '__main__':
     h_param = np.diff(np.array([0.0, 43.8, 87.6]))
     d_param = np.array([6.0, 4.935, 3.87])
     t_param = 1.3*np.array([0.027, 0.023, 0.019])
+    z_foundation = 0.0
     L_reinforced = 30.0  # [m] buckling length
     theta_stress = 0.0
     yaw = 0.0
@@ -630,6 +631,7 @@ if __name__ == '__main__':
 
     # --- geometry ----
     prob['hub_height'] = h_param.sum()
+    prob['foundation_height'] = 0.0
     prob['tower_section_height'] = h_param
     prob['tower_outer_diameter'] = d_param
     prob['tower_wall_thickness'] = t_param
