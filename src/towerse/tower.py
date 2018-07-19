@@ -446,6 +446,9 @@ class TowerSE(Group):
             self.connect('pre'+lc+'.mIxy', 'tower'+lc+'.mIxy')
             self.connect('pre'+lc+'.mIxz', 'tower'+lc+'.mIxz')
             self.connect('pre'+lc+'.mIyz', 'tower'+lc+'.mIyz')
+            self.connect('pre'+lc+'.mrhox', 'tower'+lc+'.mrhox')
+            self.connect('pre'+lc+'.mrhoy', 'tower'+lc+'.mrhoy')
+            self.connect('pre'+lc+'.mrhoz', 'tower'+lc+'.mrhoz')
 
             self.connect('pre'+lc+'.plidx', 'tower'+lc+'.plidx')
             self.connect('pre'+lc+'.Fx', 'tower'+lc+'.Fx')
