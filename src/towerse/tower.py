@@ -414,6 +414,8 @@ class TowerSE(Group):
         self.add('tower_force_discretization', IndepVarComp('tower_force_discretization', 5.0), promotes=['*'])
         self.add('monopile', IndepVarComp('monopile', False, pass_by_obj=True), promotes=['*'])
         self.add('suctionpile_depth', IndepVarComp('suctionpile_depth', 0.0), promotes=['*'])
+        self.add('soil_G', IndepVarComp('soil_G', 0.0), promotes=['*'])
+        self.add('soil_nu', IndepVarComp('soil_nu', 0.0), promotes=['*'])
 
         self.add('geom', TowerLeanSE(nPoints, nFull), promotes=['*'])
         self.add('props', CylindricalShellProperties(nFull))
@@ -424,6 +426,8 @@ class TowerSE(Group):
         self.connect('t_full', 'props.t')
         self.connect('d_full', 'soil.d0', src_indices=[0])
         self.connect('suctionpile_depth', 'soil.depth')
+        self.connect('soil_G', 'soil.G')
+        self.connect('soil_nu', 'soil.nu')
         
         # Add in all Components that drive load cases
         # Note multiple load cases have to be handled by replicating components and not groups/assemblies.
@@ -609,6 +613,8 @@ if __name__ == '__main__':
     cm = 1.0
     monopile = False
     suction_depth = 0.0
+    soilG = 140e6
+    soilnu = 0.4
     # ---------------
 
     
@@ -684,6 +690,8 @@ if __name__ == '__main__':
     prob['distLoads1.yaw'] = prob['distLoads2.yaw'] = yaw
     prob['monopile'] = monopile
     prob['suctionpile_depth'] = suction_depth
+    prob['soil_G'] = soilG
+    prob['soil_nu'] = soilnu
     # --- material props ---
     prob['E'] = E
     prob['G'] = G
