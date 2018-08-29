@@ -22,7 +22,7 @@ from openmdao.api import Component, Group, Problem, IndepVarComp
 
 from commonse.WindWaveDrag import AeroHydroLoads, CylinderWindDrag, CylinderWaveDrag
 
-from commonse.environment import WindBase, WaveBase, LinearWaves, SoilBase, PowerWind, LogWind
+from commonse.environment import WindBase, WaveBase, LinearWaves, TowerSoil, PowerWind, LogWind
 from commonse.tube import CylindricalShellProperties
 from commonse.utilities import assembleI, unassembleI
 from commonse import gravity, eps, NFREQ
@@ -155,6 +155,10 @@ class TowerPreFrame(Component):
         # point loads
         self.add_param('rna_F', np.zeros((3,)), units='N', desc='rna force')
         self.add_param('rna_M', np.zeros((3,)), units='N*m', desc='rna moment')
+
+        # Monopile handling
+        self.add_param('k_monopile', np.zeros(6), units='N/m', desc='Stiffness BCs for ocean soil.  Only used if monoflag inputis True')
+        self.add_param('monopile', False, desc='Flag for monopile BCs', pass_by_obj=True)
         
         # spring reaction data.  Use float('inf') for rigid constraints.
         nK = 1
@@ -165,7 +169,7 @@ class TowerPreFrame(Component):
         self.add_output('ktx', np.zeros(nK), units='m', desc='spring stiffness in theta_x-rotation', pass_by_obj=True)
         self.add_output('kty', np.zeros(nK), units='m', desc='spring stiffness in theta_y-rotation', pass_by_obj=True)
         self.add_output('ktz', np.zeros(nK), units='m', desc='spring stiffness in theta_z-rotation', pass_by_obj=True)
-
+        
         # extra mass
         nMass = 1
         self.add_output('midx', np.zeros(nMass, dtype=np.int_), desc='indices where added mass should be applied.', pass_by_obj=True)
@@ -194,13 +198,22 @@ class TowerPreFrame(Component):
     def solve_nonlinear(self, params, unknowns, resids):
         # Prepare for reactions: rigid at tower base
         self.unknowns['kidx'] = np.array([ 0 ], dtype=np.int_)
-        self.unknowns['kx']   = np.array([ 1.0 ])
-        self.unknowns['ky']   = np.array([ 1.0 ])
-        self.unknowns['kz']   = np.array([ 1.0 ])
-        self.unknowns['ktx']  = np.array([ 1.0 ])
-        self.unknowns['kty']  = np.array([ 1.0 ])
-        self.unknowns['ktz']  = np.array([ 1.0 ])
-
+        if params['monopile']:
+            kmono = self.params['k_monopile']
+            self.unknowns['kx']   = np.array([ kmono[0] ])
+            self.unknowns['ky']   = np.array([ kmono[2] ])
+            self.unknowns['kz']   = np.array([ kmono[4] ])
+            self.unknowns['ktx']  = np.array([ kmono[1] ])
+            self.unknowns['kty']  = np.array([ kmono[3] ])
+            self.unknowns['ktz']  = np.array([ kmono[5] ])
+        else:
+            self.unknowns['kx']   = np.array([ np.inf ])
+            self.unknowns['ky']   = np.array([ np.inf ])
+            self.unknowns['kz']   = np.array([ np.inf ])
+            self.unknowns['ktx']  = np.array([ np.inf ])
+            self.unknowns['kty']  = np.array([ np.inf ])
+            self.unknowns['ktz']  = np.array([ np.inf ])
+            
         # Prepare RNA for "extra node mass"
         self.unknowns['midx']  = np.array([ len(params['z'])-1 ], dtype=np.int_)
         self.unknowns['m']     = np.array([ params['mass'] ])
@@ -399,13 +412,18 @@ class TowerSE(Group):
         self.add('tower_z_DEL', IndepVarComp('tower_z_DEL', np.zeros(nDEL), pass_by_obj=True), promotes=['*'])
         self.add('tower_add_gravity', IndepVarComp('tower_add_gravity', True, pass_by_obj=True), promotes=['*'])
         self.add('tower_force_discretization', IndepVarComp('tower_force_discretization', 5.0), promotes=['*'])
+        self.add('monopile', IndepVarComp('monopile', False, pass_by_obj=True), promotes=['*'])
+        self.add('suctionpile_depth', IndepVarComp('suctionpile_depth', 0.0), promotes=['*'])
 
         self.add('geom', TowerLeanSE(nPoints, nFull), promotes=['*'])
         self.add('props', CylindricalShellProperties(nFull))
+        self.add('soil', TowerSoil())
 
         # Connections for geometry and mass
         self.connect('d_full', 'props.d')
         self.connect('t_full', 'props.t')
+        self.connect('d_full', 'soil.d0', src_indices=[0])
+        self.connect('suctionpile_depth', 'soil.depth')
         
         # Add in all Components that drive load cases
         # Note multiple load cases have to be handled by replicating components and not groups/assemblies.
@@ -425,7 +443,7 @@ class TowerSE(Group):
             self.add('waveLoads'+lc, CylinderWaveDrag(nFull), promotes=['cm','cd_usr'])
             self.add('distLoads'+lc, AeroHydroLoads(nFull))#, promotes=['yaw'])
 
-            self.add('pre'+lc, TowerPreFrame(nFull))
+            self.add('pre'+lc, TowerPreFrame(nFull), promotes=['monopile','k_monopile'])
             self.add('tower'+lc, CylinderFrame3DD(nFull, 1, 1, 1), promotes=['E','G','tol','Mmethod','geom','lump','shear',
                                                                              'nM','shift','sigma_y'])
             self.add('post'+lc, TowerPostFrame(nFull, nDEL), promotes=['E','sigma_y','DC','life','m_SN',
@@ -469,6 +487,7 @@ class TowerSE(Group):
             self.connect('tower_force_discretization', 'tower'+lc+'.dx')
             self.connect('tower_add_gravity', 'tower'+lc+'.addGravityLoadForExtraMass')
             self.connect('t_full', ['tower'+lc+'.t','post'+lc+'.t'])
+            self.connect('soil.k', 'k_monopile')
 
             self.connect('tower'+lc+'.f1', 'post'+lc+'.f1')
             self.connect('tower'+lc+'.f2', 'post'+lc+'.f2')
@@ -588,6 +607,8 @@ if __name__ == '__main__':
     hmax = 0.0
     T = 1.0
     cm = 1.0
+    monopile = False
+    suction_depth = 0.0
     # ---------------
 
     
@@ -661,7 +682,8 @@ if __name__ == '__main__':
     prob['tower_buckling_length'] = L_reinforced
     prob['tower_outfitting_factor'] = Koutfitting
     prob['distLoads1.yaw'] = prob['distLoads2.yaw'] = yaw
-    
+    prob['monopile'] = monopile
+    prob['suctionpile_depth'] = suction_depth
     # --- material props ---
     prob['E'] = E
     prob['G'] = G
