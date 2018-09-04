@@ -28,7 +28,4 @@ Referenced Environment Modules
 Referenced Tower Modules
 ========================
 .. module:: towerse.tower
-.. class:: TowerBase
-.. class:: TowerWithpBEAM
-.. class:: TowerWithFrame3DD
 .. class:: TowerSE
