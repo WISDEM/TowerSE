@@ -17,6 +17,8 @@ HISTORY:  2012 created
           - 1/2018 : G.B. modified for easier use with other modules, reducing user input burden, and shifting more to commonse
  """
 
+from __future__ import print_function
+
 import numpy as np
 from openmdao.api import Component, Group, Problem, IndepVarComp
 
@@ -432,7 +434,7 @@ class TowerSE(Group):
         # Add in all Components that drive load cases
         # Note multiple load cases have to be handled by replicating components and not groups/assemblies.
         # Replicating Groups replicates the IndepVarComps which doesn't play nicely in OpenMDAO
-        for iLC in xrange(nLC):
+        for iLC in range(nLC):
             lc = '' if nLC==1 else str(iLC+1)
             
             if wind is None or wind.lower() in ['power', 'powerwind', '']:
@@ -769,27 +771,27 @@ if __name__ == '__main__':
 
     z = prob['z_full']
 
-    print 'zs=', z
-    print 'ds=', prob['d_full']
-    print 'ts=', prob['t_full']
-    print 'mass (kg) =', prob['tower_mass']
-    print 'cg (m) =', prob['tower_center_of_mass']
-    print 'weldability =', prob['weldability']
-    print 'manufacturability =', prob['manufacturability']
-    print '\nwind: ', prob['wind1.Uref']
-    print 'f1 (Hz) =', prob['tower1.f1']
-    print 'top_deflection1 (m) =', prob['post1.top_deflection']
-    print 'stress1 =', prob['post1.stress']
-    print 'GL buckling =', prob['post1.global_buckling']
-    print 'Shell buckling =', prob['post1.shell_buckling']
-    print 'damage =', prob['post1.damage']
-    print '\nwind: ', prob['wind2.Uref']
-    print 'f1 (Hz) =', prob['tower2.f1']
-    print 'top_deflection2 (m) =', prob['post2.top_deflection']
-    print 'stress2 =', prob['post2.stress']
-    print 'GL buckling =', prob['post2.global_buckling']
-    print 'Shell buckling =', prob['post2.shell_buckling']
-    print 'damage =', prob['post2.damage']
+    print('zs=', z)
+    print('ds=', prob['d_full'])
+    print('ts=', prob['t_full'])
+    print('mass (kg) =', prob['tower_mass'])
+    print('cg (m) =', prob['tower_center_of_mass'])
+    print('weldability =', prob['weldability'])
+    print('manufacturability =', prob['manufacturability'])
+    print('\nwind: ', prob['wind1.Uref'])
+    print('f1 (Hz) =', prob['tower1.f1'])
+    print('top_deflection1 (m) =', prob['post1.top_deflection'])
+    print('stress1 =', prob['post1.stress'])
+    print('GL buckling =', prob['post1.global_buckling'])
+    print('Shell buckling =', prob['post1.shell_buckling'])
+    print('damage =', prob['post1.damage'])
+    print('\nwind: ', prob['wind2.Uref'])
+    print('f1 (Hz) =', prob['tower2.f1'])
+    print('top_deflection2 (m) =', prob['post2.top_deflection'])
+    print('stress2 =', prob['post2.stress'])
+    print('GL buckling =', prob['post2.global_buckling'])
+    print('Shell buckling =', prob['post2.shell_buckling'])
+    print('damage =', prob['post2.damage'])
 
 
     stress1 = np.copy( prob['post1.stress'] )
@@ -831,10 +833,10 @@ if __name__ == '__main__':
     #plt.tight_layout()
     plt.show()
 
-    print prob['tower1.base_F']
-    print prob['tower1.base_M']
-    print prob['tower2.base_F']
-    print prob['tower2.base_M']
+    print(prob['tower1.base_F'])
+    print(prob['tower1.base_M'])
+    print(prob['tower2.base_F'])
+    print(prob['tower2.base_M'])
     # ------------
 
     """
