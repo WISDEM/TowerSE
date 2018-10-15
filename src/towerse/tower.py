@@ -62,16 +62,19 @@ class TowerMass(Component):
         super(TowerMass, self).__init__()
         
         self.add_param('cylinder_mass', val=np.zeros(nPoints-1), units='kg', desc='Total cylinder mass')
+        self.add_param('cylinder_cost', val=0.0, units='USD', desc='Total cylinder cost')
         self.add_param('cylinder_center_of_mass', val=0.0, units='m', desc='z-position of center of mass of cylinder')
         self.add_param('cylinder_section_center_of_mass', val=np.zeros(nPoints-1), units='m', desc='z position of center of mass of each can in the cylinder')
         self.add_param('cylinder_I_base', np.zeros((6,)), units='kg*m**2', desc='mass moment of inertia of cylinder about base [xx yy zz xy xz yz]')
         
+        self.add_output('tower_cost', val=0.0, units='USD', desc='Total tower cost')
         self.add_output('tower_mass', val=0.0, units='kg', desc='Total tower mass')
         self.add_output('tower_center_of_mass', val=0.0, units='m', desc='z-position of center of mass of tower')
         self.add_output('tower_section_center_of_mass', val=np.zeros(nPoints-1), units='m', desc='z position of center of mass of each can in the tower')
         self.add_output('tower_I_base', np.zeros((6,)), units='kg*m**2', desc='mass moment of inertia of tower about base [xx yy zz xy xz yz]')
         
     def solve_nonlinear(self, params, unknowns, resids):
+        unknowns['tower_cost']           = params['cylinder_cost']
         unknowns['tower_mass']           = params['cylinder_mass'].sum()
         unknowns['tower_center_of_mass'] = params['cylinder_center_of_mass']
         unknowns['tower_section_center_of_mass'] = params['cylinder_section_center_of_mass']
@@ -84,21 +87,31 @@ class TowerMass(Component):
 
         J = {}
         J['tower_mass','cylinder_mass'] = np.ones(len(unknowns['cylinder_mass']))
+        J['tower_mass','cylinder_cost'] = 0.0
         J['tower_mass','cylinder_center_of_mass'] = 0.0
         J['tower_mass','cylinder_section_center_of_mass'] = zeroPts
         J['tower_mass','cylinder_I_base'] = zero6
 
+        J['tower_cost','cylinder_mass'] = np.zeros(len(unknowns['cylinder_mass']))
+        J['tower_cost','cylinder_cost'] = 1.0
+        J['tower_cost','cylinder_center_of_mass'] = 0.0
+        J['tower_cost','cylinder_section_center_of_mass'] = zeroPts
+        J['tower_cost','cylinder_I_base'] = zero6
+
         J['tower_center_of_mass','cylinder_mass'] = 0.0
+        J['tower_center_of_mass','cylinder_cost'] = 0.0
         J['tower_center_of_mass','cylinder_center_of_mass'] = 1.0
         J['tower_center_of_mass','cylinder_section_center_of_mass'] = zeroPts
         J['tower_center_of_mass','cylinder_I_base'] = zero6
 
         J['tower_section_center_of_mass','cylinder_mass'] = 0.0
+        J['tower_section_center_of_mass','cylinder_cost'] = 0.0
         J['tower_section_center_of_mass','cylinder_center_of_mass'] = 0.0
         J['tower_section_center_of_mass','cylinder_section_center_of_mass'] = np.eye(npts)
         J['tower_section_center_of_mass','cylinder_I_base'] = np.zeros((npts,6))
 
         J['tower_I_base','cylinder_mass'] = 1.0
+        J['tower_I_base','cylinder_cost'] = 0.0
         J['tower_I_base','cylinder_center_of_mass'] = 0.0
         J['tower_I_base','cylinder_section_center_of_mass'] = np.zeros((6,npts))
         J['tower_I_base','cylinder_I_base'] = np.eye(len(params['cylinder_I_base']))
@@ -381,8 +394,9 @@ class TowerLeanSE(Group):
         self.add('geometry', CylinderDiscretization(nPoints, nRefine), promotes=['*'])
         self.add('tgeometry', TowerDiscretization(), promotes=['hub_height','height_constraint'])
         
-        self.add('cm', CylinderMass(nFull), promotes=['material_density','z_full','d_full','t_full'])
-        self.add('tm', TowerMass(nFull), promotes=['tower_mass','tower_center_of_mass','tower_I_base'])
+        self.add('cm', CylinderMass(nFull), promotes=['material_density','z_full','d_full','t_full',
+                                                      'material_cost_rate','labor_cost_rate','painting_cost_rate'])
+        self.add('tm', TowerMass(nFull), promotes=['tower_mass','tower_center_of_mass','tower_I_base','tower_cost'])
         self.add('gc', Util.GeometricConstraints(nPoints), promotes=['min_d_to_t','max_taper','manufacturability','weldability'])
         self.add('turb', TurbineMass(), promotes=['turbine_mass','rna_mass', 'rna_cg', 'rna_I'])
 
