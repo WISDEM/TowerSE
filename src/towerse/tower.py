@@ -26,7 +26,7 @@ from commonse.WindWaveDrag import AeroHydroLoads, CylinderWindDrag, CylinderWave
 
 from commonse.environment import WindBase, WaveBase, LinearWaves, TowerSoil, PowerWind, LogWind
 from commonse.tube import CylindricalShellProperties
-from commonse.utilities import assembleI, unassembleI
+from commonse.utilities import assembleI, unassembleI, nodal2sectional
 from commonse import gravity, eps, NFREQ
 
 from commonse.vertical_cylinder import CylinderDiscretization, CylinderMass, CylinderFrame3DD
@@ -285,19 +285,19 @@ class TowerPostFrame(Component):
         # effective geometry -- used for handbook methods to estimate hoop stress, buckling, fatigue
         self.add_param('z', np.zeros(nFull), units='m', desc='location along tower. start at bottom and go to top')
         self.add_param('d', np.zeros(nFull), units='m', desc='effective tower diameter for section')
-        self.add_param('t', np.zeros(nFull), units='m', desc='effective shell thickness for section')
+        self.add_param('t', np.zeros(nFull-1), units='m', desc='effective shell thickness for section')
         self.add_param('L_reinforced', 0.0, units='m', desc='buckling length')
 
         # Material properties
         self.add_param('E', 0.0, units='N/m**2', desc='modulus of elasticity')
 
         # Processed Frame3DD outputs
-        self.add_param('Fz', np.zeros(nFull), units='N', desc='Axial foce in vertical z-direction in cylinder structure.')
-        self.add_param('Mxx', np.zeros(nFull), units='N*m', desc='Moment about x-axis in cylinder structure.')
-        self.add_param('Myy', np.zeros(nFull), units='N*m', desc='Moment about y-axis in cylinder structure.')
-        self.add_param('axial_stress', val=np.zeros(nFull), units='N/m**2', desc='axial stress in tower elements')
-        self.add_param('shear_stress', val=np.zeros(nFull), units='N/m**2', desc='shear stress in tower elements')
-        self.add_param('hoop_stress' , val=np.zeros(nFull), units='N/m**2', desc='hoop stress in tower elements')
+        self.add_param('Fz', np.zeros(nFull-1), units='N', desc='Axial foce in vertical z-direction in cylinder structure.')
+        self.add_param('Mxx', np.zeros(nFull-1), units='N*m', desc='Moment about x-axis in cylinder structure.')
+        self.add_param('Myy', np.zeros(nFull-1), units='N*m', desc='Moment about y-axis in cylinder structure.')
+        self.add_param('axial_stress', val=np.zeros(nFull-1), units='N/m**2', desc='axial stress in tower elements')
+        self.add_param('shear_stress', val=np.zeros(nFull-1), units='N/m**2', desc='shear stress in tower elements')
+        self.add_param('hoop_stress' , val=np.zeros(nFull-1), units='N/m**2', desc='hoop stress in tower elements')
 
         # safety factors
         self.add_param('gamma_f', 1.35, desc='safety factor on loads')
@@ -321,10 +321,10 @@ class TowerPostFrame(Component):
         # outputs
         self.add_output('structural_frequencies', np.zeros(NFREQ), units='Hz', desc='First and second natural frequency')
         self.add_output('top_deflection', 0.0, units='m', desc='Deflection of tower top in yaw-aligned +x direction')
-        self.add_output('stress', np.zeros(nFull), desc='Von Mises stress utilization along tower at specified locations.  incudes safety factor.')
-        self.add_output('shell_buckling', np.zeros(nFull), desc='Shell buckling constraint.  Should be < 1 for feasibility.  Includes safety factors')
-        self.add_output('global_buckling', np.zeros(nFull), desc='Global buckling constraint.  Should be < 1 for feasibility.  Includes safety factors')
-        self.add_output('damage', np.zeros(nFull), desc='Fatigue damage at each tower section')
+        self.add_output('stress', np.zeros(nFull-1), desc='Von Mises stress utilization along tower at specified locations.  incudes safety factor.')
+        self.add_output('shell_buckling', np.zeros(nFull-1), desc='Shell buckling constraint.  Should be < 1 for feasibility.  Includes safety factors')
+        self.add_output('global_buckling', np.zeros(nFull-1), desc='Global buckling constraint.  Should be < 1 for feasibility.  Includes safety factors')
+        self.add_output('damage', np.zeros(nFull-1), desc='Fatigue damage at each tower section')
         self.add_output('turbine_F', val=np.zeros(3), units='N', desc='Total force on tower+rna')
         self.add_output('turbine_M', val=np.zeros(3), units='N*m', desc='Total x-moment on tower+rna measured at base')
         
@@ -343,6 +343,8 @@ class TowerPostFrame(Component):
         sigma_y      = params['sigma_y'] * np.ones(axial_stress.shape)
         E            = params['E'] * np.ones(axial_stress.shape)
         L_reinforced = params['L_reinforced'] * np.ones(axial_stress.shape)
+        d,_          = nodal2sectional(params['d'])
+        z_section,_  = nodal2sectional(params['z'])
 
         # Frequencies
         unknowns['structural_frequencies'] = np.zeros(NFREQ)
@@ -354,22 +356,22 @@ class TowerPostFrame(Component):
                       params['gamma_f']*params['gamma_m']*params['gamma_n'], sigma_y)
 
         # shell buckling
-        unknowns['shell_buckling'] = Util.shellBucklingEurocode(params['d'], params['t'], axial_stress, hoop_stress,
+        unknowns['shell_buckling'] = Util.shellBucklingEurocode(d, params['t'], axial_stress, hoop_stress,
                                                                 shear_stress, L_reinforced, E, sigma_y, params['gamma_f'], params['gamma_b'])
 
         # global buckling
         tower_height = params['z'][-1] - params['z'][0]
         M = np.sqrt(params['Mxx']**2 + params['Myy']**2)
-        unknowns['global_buckling'] = Util.bucklingGL(params['d'], params['t'], params['Fz'], M, tower_height, E,
+        unknowns['global_buckling'] = Util.bucklingGL(d, params['t'], params['Fz'], M, tower_height, E,
                                                       sigma_y, params['gamma_f'], params['gamma_b'])
 
         # fatigue
-        N_DEL = 365.0*24.0*3600.0*params['life'] * np.ones(len(params['z']))
+        N_DEL = 365.0*24.0*3600.0*params['life'] * np.ones(len(params['t']))
         unknowns['damage'] = np.zeros(N_DEL.shape)
         if any(params['M_DEL']):
-            M_DEL = np.interp(params['z'], params['z_DEL'], params['M_DEL'])
+            M_DEL = np.interp(z_section, params['z_DEL'], params['M_DEL'])
 
-            unknowns['damage'] = Util.fatigue(M_DEL, N_DEL, params['d'], params['t'], params['m_SN'],
+            unknowns['damage'] = Util.fatigue(M_DEL, N_DEL, d, params['t'], params['m_SN'],
                                               params['DC'], params['gamma_fatigue'], stress_factor=1.0, weld_factor=True)
 
 # -----------------
@@ -386,7 +388,7 @@ class TowerLeanSE(Group):
         # Independent variables that are unique to TowerSE
         self.add('tower_section_height', IndepVarComp('tower_section_height', np.zeros(nPoints-1)), promotes=['*'])
         self.add('tower_outer_diameter', IndepVarComp('tower_outer_diameter', np.zeros(nPoints)), promotes=['*'])
-        self.add('tower_wall_thickness', IndepVarComp('tower_wall_thickness', np.zeros(nPoints)), promotes=['*'])
+        self.add('tower_wall_thickness', IndepVarComp('tower_wall_thickness', np.zeros(nPoints-1)), promotes=['*'])
         self.add('tower_outfitting_factor', IndepVarComp('tower_outfitting_factor', 0.0), promotes=['*'])
         self.add('tower_buckling_length', IndepVarComp('tower_buckling_length', 0.0), promotes=['*'])
 
@@ -591,7 +593,7 @@ if __name__ == '__main__':
     # --- geometry ----
     h_param = np.diff(np.array([0.0, 43.8, 87.6]))
     d_param = np.array([6.0, 4.935, 3.87])
-    t_param = 1.3*np.array([0.027, 0.023, 0.019])
+    t_param = 1.3*np.array([0.025, 0.021])
     z_foundation = 0.0
     L_reinforced = 30.0  # [m] buckling length
     theta_stress = 0.0
@@ -783,7 +785,7 @@ if __name__ == '__main__':
     # # --- run ---
     prob.run()
 
-    z = prob['z_full']
+    z,_ = nodal2sectional(prob['z_full'])
 
     print('zs=', z)
     print('ds=', prob['d_full'])
