@@ -411,6 +411,7 @@ class TowerLeanSE(Group):
         self.connect('hub_height', 'turb.hubH')
 
         self.connect('cm.mass', 'tm.cylinder_mass')
+        self.connect('cm.cost', 'tm.cylinder_cost')
         self.connect('cm.center_of_mass', 'tm.cylinder_center_of_mass')
         self.connect('cm.section_center_of_mass','tm.cylinder_section_center_of_mass')
         self.connect('cm.I_base','tm.cylinder_I_base')
