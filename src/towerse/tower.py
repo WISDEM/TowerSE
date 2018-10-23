@@ -153,9 +153,35 @@ class TurbineMass(Component):
         I_tower = assembleI(params['tower_I_base'])
         I_rna   = assembleI(params['rna_I']) + params['rna_mass']*(np.dot(R, R)*np.eye(3) - np.outer(R, R))
         unknowns['turbine_I_base'] = unassembleI(I_tower + I_rna)
-        
-    
 
+        
+
+class TipClearance(Component):
+    def __init__(self, nFull):
+        super(TipClearance, self).__init__()
+
+        self.add_param('z_full', np.zeros(nFull), units='m', desc='location along tower. start at bottom and go to top')
+        self.add_param('d_full', np.zeros(nFull), units='m', desc='effective tower diameter for section')
+        self.add_param('tip_position', val=np.zeros(3), units='m', desc='Position coordinates of deflected tip in yaw c.s.')
+        self.add_param('hub_cm', val=np.zeros(3), units='m', desc='location of hub relative to tower-top in yaw-aligned c.s.')
+        self.add_param('downwind', val=False, pass_by_obj=True)
+
+        self.add_output('tip_deflection_margin', val=0.0, units='m', desc='clearance between undeflected blade and tower')
+        
+        # Derivatives
+        self.deriv_options['type'] = 'fd'
+        self.deriv_options['form'] = 'central'
+        self.deriv_options['step_calc'] = 'relative'
+        self.deriv_options['step_size'] = 1e-5
+        
+    def solve_nonlinear(self, params, unknowns, resids):
+        coeff    = -1.0 if params['downwind'] else 1.0
+        p_tip    = params['tip_position']
+        r_interp = 0.5 * np.interp(p_tip[-1], params['z_full'], params['d_full'])
+        unknowns['tip_deflection_margin'] = -coeff * (p_tip[0] + params['hub_cm'][0] + coeff*r_interp)
+        
+
+        
 class TowerPreFrame(Component):
     def __init__(self, nFull):
         super(TowerPreFrame, self).__init__()
@@ -401,7 +427,8 @@ class TowerLeanSE(Group):
         self.add('tm', TowerMass(nFull), promotes=['tower_mass','tower_center_of_mass','tower_I_base','tower_cost'])
         self.add('gc', Util.GeometricConstraints(nPoints), promotes=['min_d_to_t','max_taper','manufacturability','weldability'])
         self.add('turb', TurbineMass(), promotes=['turbine_mass','rna_mass', 'rna_cg', 'rna_I'])
-
+        self.add('tip', TipClearance(nFull), promotes=['*'])
+        
         # Connections for geometry and mass
         self.connect('tower_section_height', 'section_height')
         self.connect('tower_outer_diameter', ['diameter', 'gc.d'])
@@ -677,8 +704,11 @@ if __name__ == '__main__':
 
 
     # --- constraints ---
-    min_d_to_t = 120.0
-    max_taper = 0.2
+    min_d_to_t   = 120.0
+    max_taper    = 0.2
+    hub_cm       = np.array([-5.01910, 0.0, 1.96256])
+    tip_position = np.array([-0.9315, 0.0, 27.5])
+    downwind     = False
     # ---------------
 
     # # V_max = 80.0  # tip speed
@@ -766,6 +796,9 @@ if __name__ == '__main__':
     # --- constraints ---
     prob['min_d_to_t'] = min_d_to_t
     prob['max_taper'] = max_taper
+    prob['hub_cm'] = hub_cm
+    prob['tip_position'] = tip_position
+    prob['downwind'] = downwind    
     # ---------------
 
 
