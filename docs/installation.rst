@@ -4,11 +4,11 @@ Installation
 .. admonition:: Prerequisites
    :class: warning
 
-	General: C compiler, Fortran compiler, NumPy, SciPy, Swig, pyWin32, MatlPlotLib, Lxml, OpenMDAO
+	General: C compiler, NumPy, SciPy, MatlPlotLib, OpenMDAO
 
 	Wind Plant Framework: FUSED-Wind (Framework for Unified Systems Engineering and Design of Wind Plants)
 
-	Sub-Models: CommonSE, pBEAM
+	Sub-Models: CommonSE, pyFrame3DD
 
 	Supporting python packages: Pandas, Algopy, Zope.interface, Sphinx, Xlrd, PyOpt, py2exe, Pyzmq, Sphinxcontrib-bibtex, Sphinxcontrib-zopeext, Numpydoc, Ipython
 

@@ -34,7 +34,7 @@ release = '0.1.4'
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.mathjax', 'sphinx.ext.viewcode',
               'numpydoc', 'sphinx.ext.autosummary', 'sphinxcontrib.bibtex', 'exts.numfig',
-              'sphinxcontrib.zopeext.autointerface', 'sphinx.ext.intersphinx']
+              'sphinx.ext.intersphinx']
 
 autosummary_generate = True  # generate the autosummary pages automatically
 numpydoc_show_class_members = False  # don't let numpydoc generate autosummary b/c it messes up toctree

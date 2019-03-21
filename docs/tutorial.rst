@@ -18,14 +18,14 @@ In this case we are using :class:`PowerWind`, which defines a power-profile for 
 
 .. currentmodule:: towerse.tower
 
-Tor tower1 and tower2, a component that implements :class:`TowerBase` must be used.  Two default implementations are provided.  The first, :class:`TowerWithpBEAM`, uses the beam finite element code `pBEAM <https://github.com/WISDEM/pBEAM>`_.  The second, :class:`TowerWithFrame3DD` uses the frame finite element code `Frame3DD <http://frame3dd.sourceforge.net/>`_.
+Tor tower1 and tower2, the module uses the frame finite element code `Frame3DD <http://frame3dd.sourceforge.net/>`_.
 
 .. literalinclude:: ../src/towerse/tower.py
     :language: python
     :start-after: # --- tower setup
     :end-before: # ---
 
-With the tower configuration setup, we define some of the geometric parameters.  Some of these parameters are specific to the module we have chosen to load, :class:`TowerWithpBEAM`, and may differ for other modules.  Some of the geometric parameters are seen in :num:`Figure #tower-fig`.  The tower is not restricted to 3 sections, any number of sections can be defined.  The array `z` is given in coordinates nondimensionalized by the tower height.  The array `n`, should of length len(tower.z)-1 and represents the number of finite elements to be used in each tower can.  The float `L_reinforced` is a reinforcement length used in the buckling calculations.  Yaw and tilt are needed to handle to mass/load transfer.  For offshore applications, monopile geometry can also be defined (see :class:`TowerSE`).
+With the tower configuration setup, we define some of the geometric parameters.  Some of the geometric parameters are seen in :num:`Figure #tower-fig`.  The tower is not restricted to 3 sections, any number of sections can be defined.  The array `z` is given in coordinates nondimensionalized by the tower height.  The array `n`, should of length len(tower.z)-1 and represents the number of finite elements to be used in each tower can.  The float `L_reinforced` is a reinforcement length used in the buckling calculations.  Yaw and tilt are needed to handle to mass/load transfer.  For offshore applications, monopile geometry can also be defined (see :class:`TowerSE`).
 
 .. _tower-fig:
 
