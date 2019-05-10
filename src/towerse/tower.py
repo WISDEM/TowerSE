@@ -217,7 +217,7 @@ class TowerPreFrame(Component):
         # Prepare for reactions: rigid at tower base
         unknowns['kidx'] = np.array([ 0 ], dtype=np.int_)
         if params['monopile']:
-            kmono = self.params['k_monopile']
+            kmono = params['k_monopile']
             unknowns['kx']   = np.array([ kmono[0] ])
             unknowns['ky']   = np.array([ kmono[2] ])
             unknowns['kz']   = np.array([ kmono[4] ])
