@@ -1,3 +1,11 @@
+# DEPRECATED
+------------
+
+**THIS REPOSITORY IS DEPRECATED AND WILL BE ARCHIVED (READ-ONLY) IN NOVEMBER 2019.**
+
+WISDEM has moved to a single, integrated repository at https://github.com/wisdem/wisdem
+
+---------------
 # TowerSE
 
 TowerSE is a systems engineering model of cylindrical shell wind turbine towers.  The analysis uses beam finite element theory, cylinder drag data, linear wave theory, and shell/global buckling methods from wind turbine standards.  The module is developed as an OpenMDAO assembly.
